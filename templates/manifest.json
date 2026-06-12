@@ -1,0 +1,34 @@
+{
+	"templateVersion": "0.1.0",
+	"include": [],
+	"exclude": [],
+	"files": [
+		{
+      "path": "src/metadata/**",
+      "mode": "dynamic",
+      "description": "Generated project metadata."
+    },
+    {
+      "path": "src/states/generated/**",
+      "mode": "dynamic",
+      "description": "Generated state implementations."
+    },
+    {
+      "path": "src/transitions/generated/**",
+      "mode": "dynamic",
+      "description": "Generated transition implementations."
+    },
+    {
+      "path": "src/extensions/*.ts",
+      "mode": "user-extension",
+      "createIfMissing": true,
+      "description": "Public user extension registry files."
+    },
+    {
+      "path": "coverit.config.json",
+      "mode": "user-extension",
+      "createIfMissing": true,
+      "description": "Project configuration can be edited after generation."
+    }
+	]
+}

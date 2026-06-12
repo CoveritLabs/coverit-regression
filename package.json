@@ -4,10 +4,10 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "build:generator": "tsc -p tsconfig.generator.json",
-    "generate": "npm run build:generator -- --pretty false && node dist/cli/generate.js",
-    "generate:check": "npm run build:generator -- --pretty false && node dist/cli/generate.js --check",
-    "generate:sample": "npm run build:generator -- --pretty false && node dist/cli/generate.js --target output/generated-framework",
+    "build:generator": "tsc -p tsconfig.json --pretty false && tsc-alias -p tsconfig.json",
+    "generate": "npm run build:generator && node dist/cli/main.js",
+    "generate:check": "npm run build:generator && node dist/cli/main.js --check",
+    "generate:sample": "npm run build:generator && node dist/cli/main.js --target output/generated-framework",
     "commit": "cz",
     "prepare": "husky"
   },
@@ -24,12 +24,15 @@
     "@eslint/js": "^9.21.0",
     "@types/ejs": "^3.1.5",
     "@types/node": "^25.9.3",
+    "@types/winston": "^2.4.4",
     "commitizen": "^4.3.1",
     "cz-conventional-changelog": "^3.3.0",
-    "husky": "^9.1.7"
+    "husky": "^9.1.7",
+    "tsc-alias": "^1.8.17"
   },
   "dependencies": {
     "ejs": "^6.0.1",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "winston": "^3.19.0"
   }
 }

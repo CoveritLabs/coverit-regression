@@ -21,9 +21,14 @@
       ],
       "@utils/*": [
         "src/utils/*"
+      ],
+      "@input/*": [
+        "src/input/*"
+      ],
+      "@planner/*": [
+        "src/planner/*"
       ]
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["src/templates/**/*"],
 }

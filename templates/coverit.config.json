@@ -1,0 +1,16 @@
+{
+  "run": {
+    "projectId": "",
+    "artifactRoot": "artifacts/"
+  },
+  "api": {
+    "enabled": false,
+    "baseUrl": "http://localhost:8080",
+    "apiKeyEnv": "COVERIT_API_KEY",
+    "eventPath": "/api/v1/regression/runs/{runId}/events",
+    "completionPath": "/api/v1/regression/runs/{runId}/complete"
+  },
+  "reporting": {
+    "localArtifactsEnabled": true
+  }
+}
