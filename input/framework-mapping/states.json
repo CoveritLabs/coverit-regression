@@ -1,0 +1,44 @@
+{
+  "S_HOME": {
+    "id": "S_HOME",
+    "type": "STATE",
+    "label": "Home page",
+    "url": "/",
+    "className": "HomePageState",
+    "baselineDir": "home",
+    "dom": {
+      "elements": {
+        "itemPrice": {
+          "cssSelector": "[data-testid='item-price']"
+        },
+        "cartButton": {
+          "cssSelector": "[data-testid='cart-button']"
+        }
+      }
+    }
+  },
+  "S_CART": {
+    "id": "S_CART",
+    "type": "STATE",
+    "label": "Cart page",
+    "url": "/cart",
+    "className": "CartPageState",
+    "baselineDir": "cart",
+    "dom": {
+      "elements": {
+        "cartRows": {
+          "cssSelector": ".cart-item"
+        },
+        "cartItemName": {
+          "cssSelector": ".cart-item-name"
+        },
+        "cartItemCost": {
+          "cssSelector": ".cart-item-price"
+        },
+        "cartTotal": {
+          "cssSelector": "#total-amount"
+        }
+      }
+    }
+  }
+}

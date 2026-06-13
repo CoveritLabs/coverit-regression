@@ -13,5 +13,7 @@ export const PATHS = {
   INPUT: path.join(PROJECT_ROOT, "input"),
   LOG_FILE: path.join(PROJECT_ROOT, "logs", "generator.log"),
   BDD_FEATURES: path.join(PROJECT_ROOT, "input", "features"),
+  FRAMEWORK_MAPPING: path.join(PROJECT_ROOT, "input", "framework-mapping"),
   TEMPLATES: path.join(PROJECT_ROOT, "templates"),
+  MATERIALIZED_TEMPLATES: path.join(PROJECT_ROOT, ".generated", "templates"),
 } as const;

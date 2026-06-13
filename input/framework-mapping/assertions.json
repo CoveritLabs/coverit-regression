@@ -1,0 +1,27 @@
+{
+  "A_CART_TOTAL_MATCHES": {
+    "id": "A_CART_TOTAL_MATCHES",
+    "type": "ASSERTION",
+    "label": "Cart total matches item list",
+    "targetId": "S_CART",
+    "severity": "blocking",
+    "definition": {
+      "type": "design-operation",
+      "operationId": "assertCartTotalMatchesItems"
+    }
+  },
+  "A_CART_ROWS_VISIBLE": {
+    "id": "A_CART_ROWS_VISIBLE",
+    "type": "ASSERTION",
+    "label": "Cart rows are visible",
+    "targetId": "S_CART",
+    "severity": "blocking",
+    "definition": {
+      "type": "element",
+      "assertion": "visibility",
+      "stateId": "S_CART",
+      "locatorKey": "cartRows",
+      "visible": true
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "H_STORE_ITEM_COST": {
+    "id": "H_STORE_ITEM_COST",
+    "type": "ACTION_HOOK",
+    "label": "Store item cost",
+    "timing": "post",
+    "targetId": "T_OPEN_CART",
+    "definition": {
+      "type": "design-operation",
+      "operationId": "storeItemCost"
+    }
+  },
+  "H_APPEND_CART_ITEM": {
+    "id": "H_APPEND_CART_ITEM",
+    "type": "ACTION_HOOK",
+    "label": "Append cart item",
+    "timing": "post",
+    "targetId": "T_OPEN_CART",
+    "definition": {
+      "type": "design-operation",
+      "operationId": "appendCartItem"
+    }
+  }
+}

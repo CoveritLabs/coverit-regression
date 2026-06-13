@@ -1,0 +1,13 @@
+{
+  "T_OPEN_CART": {
+    "id": "T_OPEN_CART",
+    "type": "TRANSITION",
+    "label": "Open cart",
+    "className": "OpenCartTransition",
+    "action": {
+      "type": "click",
+      "stateId": "S_HOME",
+      "locatorKey": "cartButton"
+    }
+  }
+}
