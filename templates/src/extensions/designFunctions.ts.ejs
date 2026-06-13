@@ -1,0 +1,16 @@
+export interface DesignFunctionContext {
+  store: {
+    get(key: string): unknown;
+    set(key: string, value: unknown): void;
+    snapshot(): Record<string, unknown>;
+  };
+  extracts: Record<string, unknown>;
+  evaluate(expression: string, context?: Record<string, unknown>): unknown;
+}
+
+export type DesignFunction = (
+  context: DesignFunctionContext,
+  args?: Record<string, unknown>,
+) => Promise<unknown> | unknown;
+
+export const designFunctions = {} satisfies Record<string, DesignFunction>;

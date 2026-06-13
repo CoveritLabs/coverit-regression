@@ -1,0 +1,15 @@
+import { BaseGeneratedTransition } from "@/transitions/generated/BaseGeneratedTransition";
+<% for (const transitionClass of metadata.transitionClasses) { -%>
+import { <%- transitionClass.className %> } from "@/transitions/generated/<%- transitionClass.className %>";
+<% } -%>
+
+export const generatedTransitionFactories: Record<string, () => BaseGeneratedTransition> = {
+<% for (const transitionClass of metadata.transitionClasses) { -%>
+  <%- JSON.stringify(transitionClass.transitionId) %>: () => new <%- transitionClass.className %>(),
+<% } -%>
+};
+
+export { BaseGeneratedTransition } from "@/transitions/generated/BaseGeneratedTransition";
+<% for (const transitionClass of metadata.transitionClasses) { -%>
+export { <%- transitionClass.className %> } from "@/transitions/generated/<%- transitionClass.className %>";
+<% } -%>

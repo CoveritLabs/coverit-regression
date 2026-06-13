@@ -1,0 +1,23 @@
+export interface AssertionFunctionResult {
+  passed: boolean;
+  message: string;
+  severity?: "blocking" | "warning" | "info";
+  details?: unknown;
+}
+
+export interface AssertionFunctionContext {
+  page: unknown;
+  store: {
+    get(key: string): unknown;
+    snapshot(): Record<string, unknown>;
+  };
+  extracts: Record<string, unknown>;
+  evaluate(expression: string, context?: Record<string, unknown>): unknown;
+}
+
+export type AssertionFunction = (
+  context: AssertionFunctionContext,
+  args?: Record<string, unknown>,
+) => Promise<AssertionFunctionResult> | AssertionFunctionResult;
+
+export const assertionFunctions = {} satisfies Record<string, AssertionFunction>;

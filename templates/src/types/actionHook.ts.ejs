@@ -1,0 +1,11 @@
+export type HookTiming = "pre" | "post";
+
+export interface ActionHookInfo {
+  id: string;
+  dbId: string;
+  label: string;
+  timing?: HookTiming;
+  targetId?: string;
+  contextId?: string;
+  definition: unknown;
+}

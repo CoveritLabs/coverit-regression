@@ -1,0 +1,15 @@
+export interface RegistryIdEntry {
+  dbId: string;
+}
+
+export interface RegistryClassEntry extends RegistryIdEntry {
+  className: string;
+}
+
+export interface GeneratedRegistry {
+  states: Record<string, RegistryClassEntry>;
+  transitions: Record<string, RegistryClassEntry>;
+  assertions: Record<string, RegistryIdEntry>;
+  actionHooks: Record<string, RegistryIdEntry>;
+  designClass: RegistryIdEntry;
+}

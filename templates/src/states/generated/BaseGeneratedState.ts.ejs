@@ -1,0 +1,21 @@
+import { StateInfo } from "@/types";
+
+export abstract class BaseGeneratedState {
+  readonly id: string;
+  readonly dbId: string;
+  readonly label: string;
+  readonly url: string;
+  readonly className: string;
+  readonly baselineDir?: string;
+  readonly snapshotPath?: string;
+
+  protected constructor(readonly definition: StateInfo) {
+    this.id = definition.id;
+    this.dbId = definition.dbId;
+    this.label = definition.label;
+    this.url = definition.url;
+    this.className = definition.className;
+    this.baselineDir = definition.baselineDir;
+    this.snapshotPath = definition.snapshotPath;
+  }
+}

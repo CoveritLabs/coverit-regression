@@ -1,0 +1,28 @@
+export interface StateInfo {
+  id: string;
+  dbId: string;
+  label: string;
+  url: string;
+  className: string;
+  baselineDir: string;
+  snapshotPath?: string;
+  dom?: StateDomInfo;
+}
+
+export interface StateDomInfo {
+  root?: LocatorInfo;
+  landmarks?: Record<string, LocatorInfo>;
+  elements?: Record<string, LocatorInfo>;
+}
+
+export interface LocatorInfo {
+  id?: string;
+  className?: string;
+  cssSelector?: string;
+  xpath?: string;
+  text?: string;
+  role?: string;
+  testId?: string;
+}
+
+export interface GeneratedStateDefinition extends StateInfo {}

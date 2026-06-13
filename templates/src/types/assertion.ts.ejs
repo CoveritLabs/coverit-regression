@@ -1,0 +1,11 @@
+export type AssertionSeverity = "blocking" | "warning" | "info";
+
+export interface AssertionInfo {
+  id: string;
+  dbId: string;
+  label: string;
+  targetId?: string;
+  contextId?: string;
+  severity?: AssertionSeverity;
+  definition: unknown;
+}
