@@ -1,4 +1,7 @@
 {
+  "application": {
+    "baseUrl": "http://localhost:3000"
+  },
   "run": {
     "projectId": "",
     "artifactRoot": "artifacts/"
@@ -12,5 +15,10 @@
   },
   "reporting": {
     "localArtifactsEnabled": true
+  },
+  "healing": {
+    "enabled": true,
+    "threshold": 0.55,
+    "artifactPath": "artifacts/self-healing/healing-events.jsonl"
   }
 }

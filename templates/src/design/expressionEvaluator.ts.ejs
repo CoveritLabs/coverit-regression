@@ -1,0 +1,52 @@
+export class ExpressionEvaluator {
+  evaluate(expression: string, context: Record<string, unknown>): unknown {
+    const comparison = expression.match(/^(.+?)\s*==\s*(.+)$/);
+    if (comparison) return this.deepEqual(this.evaluate(comparison[1].trim(), context), this.evaluate(comparison[2].trim(), context));
+
+    const functionCall = expression.match(/^([a-zA-Z_]\w*)\((.*)\)$/);
+    if (functionCall) {
+      const value = this.evaluate(functionCall[2].trim(), context);
+      const values = Array.isArray(value) ? value : [value];
+      if (functionCall[1] === "sum") return values.reduce((total, item) => total + this.toNumber(item), 0);
+      if (functionCall[1] === "count") return values.length;
+      if (functionCall[1] === "avg") return values.length === 0 ? 0 : values.reduce((total, item) => total + this.toNumber(item), 0) / values.length;
+      throw new Error(`Unknown expression function "${functionCall[1]}".`);
+    }
+
+    if (/^-?\d+(\.\d+)?$/.test(expression)) return Number(expression);
+    if (expression === "true") return true;
+    if (expression === "false") return false;
+    if ((expression.startsWith('"') && expression.endsWith('"')) || (expression.startsWith("'") && expression.endsWith("'"))) {
+      return expression.slice(1, -1);
+    }
+
+    return this.resolvePath(expression, context);
+  }
+
+  private resolvePath(path: string, context: Record<string, unknown>): unknown {
+    const arrayMatch = path.match(/^([a-zA-Z_][\w.]*?)\[\]\.([a-zA-Z_][\w.]*)$/);
+    if (arrayMatch) {
+      const list = this.readNested(context, arrayMatch[1]);
+      if (!Array.isArray(list)) return [];
+      return list.map((item) => this.readNested(item, arrayMatch[2]));
+    }
+    return this.readNested(context, path);
+  }
+
+  private readNested(source: unknown, path: string): unknown {
+    return path.split(".").reduce<unknown>((cursor, part) => {
+      if (!cursor || typeof cursor !== "object") return undefined;
+      return (cursor as Record<string, unknown>)[part];
+    }, source);
+  }
+
+  private toNumber(value: unknown): number {
+    if (typeof value === "number") return value;
+    const parsed = Number(String(value).replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private deepEqual(left: unknown, right: unknown): boolean {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+}

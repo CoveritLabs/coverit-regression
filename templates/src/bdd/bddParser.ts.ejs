@@ -1,0 +1,97 @@
+import fs from "fs";
+
+import { BDD_KEYWORDS, BDD_PATTERNS } from "@/constants/bddPatterns";
+import { BddKeyword, HookTiming, RuntimeFeaturePlan, RuntimeScenarioPlan, RuntimeStepPlan } from "@/types";
+
+export class BddParser {
+  parse(featurePath: string): RuntimeFeaturePlan {
+    const raw = fs.readFileSync(featurePath, "utf8");
+    const scenarios: RuntimeScenarioPlan[] = [];
+    let featureName = "";
+    let currentScenario: RuntimeScenarioPlan | undefined;
+    let currentParent: { type: "STATE" | "TRANSITION"; id: string } | undefined;
+
+    for (const rawLine of raw.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+
+      if (line.startsWith("Feature:")) {
+        featureName = line.replace("Feature:", "").trim();
+        continue;
+      }
+
+      if (line.startsWith("Scenario:") || line.startsWith("Scenario Outline:")) {
+        if (currentScenario) scenarios.push(currentScenario);
+        currentScenario = { name: line.replace(/Scenario(?: Outline)?:/, "").trim(), steps: [] };
+        currentParent = undefined;
+        continue;
+      }
+
+      if (!currentScenario) continue;
+      const keyword = this.extractKeyword(line);
+      if (!keyword) continue;
+      const stepText = line.slice(keyword.length).trim();
+
+      const designClassId = stepText.match(BDD_PATTERNS.designClass)?.[1];
+      if (designClassId) {
+        currentScenario.designClassId = designClassId;
+        continue;
+      }
+
+      const stateId = stepText.match(BDD_PATTERNS.state)?.[1];
+      if (stateId) {
+        currentScenario.steps.push({ type: "STATE", id: stateId, keyword, rawText: line });
+        currentParent = { type: "STATE", id: stateId };
+        continue;
+      }
+
+      const transitionId = stepText.match(BDD_PATTERNS.transition)?.[1];
+      if (transitionId) {
+        currentScenario.steps.push({ type: "TRANSITION", id: transitionId, keyword, rawText: line });
+        currentParent = { type: "TRANSITION", id: transitionId };
+        continue;
+      }
+
+      if ((keyword === "And" || keyword === "But") && currentParent?.type === "STATE") {
+        const assertionId = stepText.match(BDD_PATTERNS.assertion)?.[1];
+        if (assertionId) {
+          currentScenario.steps.push({
+            type: "ASSERTION",
+            id: assertionId,
+            keyword,
+            rawText: line,
+            parentId: currentParent.id,
+          });
+        }
+        continue;
+      }
+
+      if ((keyword === "And" || keyword === "But") && currentParent?.type === "TRANSITION") {
+        const hook = stepText.match(BDD_PATTERNS.hook);
+        if (hook) {
+          currentScenario.steps.push({
+            type: "ACTION_HOOK",
+            id: hook[2],
+            keyword,
+            rawText: line,
+            parentId: currentParent.id,
+            hookTiming: this.toHookTiming(hook[1]),
+          });
+        }
+      }
+    }
+
+    if (currentScenario) scenarios.push(currentScenario);
+    return { name: featureName, filePath: featurePath, scenarios };
+  }
+
+  private extractKeyword(line: string): BddKeyword | undefined {
+    return BDD_KEYWORDS.find((keyword) => line.startsWith(`${keyword} `)) as
+      | BddKeyword
+      | undefined;
+  }
+
+  private toHookTiming(value: string): HookTiming {
+    return value === "before" ? "pre" : "post";
+  }
+}

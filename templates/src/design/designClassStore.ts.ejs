@@ -1,0 +1,51 @@
+export class DesignClassStore {
+  private values: Record<string, unknown> = {};
+
+  constructor(initialValues: Record<string, unknown> = {}) {
+    this.values = structuredClone(initialValues);
+  }
+
+  get(key: string): unknown {
+    return this.readPath(key);
+  }
+
+  set(key: string, value: unknown): void {
+    this.writePath(key, value);
+  }
+
+  append(key: string, value: unknown): void {
+    const current = this.readPath(key);
+    const list = Array.isArray(current) ? current : [];
+    list.push(value);
+    this.writePath(key, list);
+  }
+
+  putMap(key: string, mapKey: string, value: unknown): void {
+    const current = this.readPath(key);
+    const map: Record<string, unknown> =
+      current && typeof current === "object" && !Array.isArray(current) ? { ...(current as Record<string, unknown>) } : {};
+    map[mapKey] = value;
+    this.writePath(key, map);
+  }
+
+  snapshot(): Record<string, unknown> {
+    return structuredClone(this.values);
+  }
+
+  private readPath(key: string): unknown {
+    return key.split(".").reduce<unknown>((cursor, part) => {
+      if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)) return undefined;
+      return (cursor as Record<string, unknown>)[part];
+    }, this.values);
+  }
+
+  private writePath(key: string, value: unknown): void {
+    const parts = key.split(".");
+    let cursor = this.values;
+    for (const part of parts.slice(0, -1)) {
+      if (!cursor[part] || typeof cursor[part] !== "object" || Array.isArray(cursor[part])) cursor[part] = {};
+      cursor = cursor[part] as Record<string, unknown>;
+    }
+    cursor[parts[parts.length - 1]] = value;
+  }
+}

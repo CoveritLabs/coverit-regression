@@ -1,0 +1,292 @@
+import fs from "fs";
+import path from "path";
+import { Page } from "@playwright/test";
+
+import { loadCoveritConfig } from "@/config/coveritConfig";
+import { CoveritConfig, HealingCandidate, HealingContext, HealingResult, LocatorInfo } from "@/types";
+
+export class HealingEngine {
+  private readonly config: CoveritConfig;
+
+  constructor(config = loadCoveritConfig()) {
+    this.config = config;
+  }
+
+  async findElement(page: Page, locatorInfo: LocatorInfo, context: HealingContext): Promise<HealingResult> {
+    const originalSelector = this.toSelector(locatorInfo);
+    const timestamp = new Date().toISOString();
+
+    if (!this.config.healing.enabled) {
+      return this.record({
+        healed: false,
+        originalSelector,
+        context,
+        timestamp,
+        message: `Healing disabled for "${originalSelector}".`,
+      });
+    }
+
+    if (await this.originalLocatorVisible(page, locatorInfo)) {
+      return this.record({
+        healed: false,
+        originalSelector,
+        healedSelector: originalSelector,
+        context,
+        timestamp,
+        message: `Selector found: "${originalSelector}".`,
+      });
+    }
+
+    const candidates = await this.visibleCandidates(page);
+    const scored = candidates
+      .map((candidate) => this.scoreCandidate(originalSelector, context, candidate))
+      .sort((left, right) => right.score - left.score);
+    const best = scored[0];
+
+    if (!best || best.score < this.config.healing.threshold) {
+      return this.record({
+        healed: false,
+        originalSelector,
+        score: best?.score,
+        breakdown: best?.breakdown,
+        context,
+        timestamp,
+        reason: best ? "below-threshold" : "no-visible-candidates",
+        message: best
+          ? `Healing failed for "${originalSelector}". Best candidate "${best.candidate.selector}" scored ${best.score.toFixed(3)} below threshold ${this.config.healing.threshold}.`
+          : `Healing failed for "${originalSelector}". No visible candidates were found.`,
+      });
+    }
+
+    return this.record({
+      healed: true,
+      originalSelector,
+      healedSelector: best.candidate.selector,
+      score: best.score,
+      breakdown: best.breakdown,
+      context,
+      timestamp,
+      reason: "current-dom-best-match",
+      message: `Healed "${originalSelector}" to "${best.candidate.selector}" with score ${best.score.toFixed(3)}. Update mapping selector manually if this healing is accepted.`,
+    });
+  }
+
+  private async originalLocatorVisible(page: Page, locatorInfo: LocatorInfo): Promise<boolean> {
+    try {
+      if (locatorInfo.cssSelector) return await page.locator(locatorInfo.cssSelector).first().isVisible({ timeout: 250 });
+      if (locatorInfo.xpath) return await page.locator(`xpath=${locatorInfo.xpath}`).first().isVisible({ timeout: 250 });
+      if (locatorInfo.testId) return await page.getByTestId(locatorInfo.testId).first().isVisible({ timeout: 250 });
+      if (locatorInfo.text) return await page.getByText(locatorInfo.text).first().isVisible({ timeout: 250 });
+      if (locatorInfo.role) return await page.getByRole(locatorInfo.role as Parameters<Page["getByRole"]>[0]).first().isVisible({ timeout: 250 });
+      if (locatorInfo.id) return await page.locator(`#${locatorInfo.id}`).first().isVisible({ timeout: 250 });
+      if (locatorInfo.className) return await page.locator(`.${locatorInfo.className}`).first().isVisible({ timeout: 250 });
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  private async visibleCandidates(page: Page): Promise<HealingCandidate[]> {
+    return page.evaluate(() => {
+      function cssEscape(value: string): string {
+        return value.replace(/["\\]/g, "\\$&");
+      }
+
+      function attrSelector(name: string, value: string): string {
+        return `[${name}="${cssEscape(value)}"]`;
+      }
+
+      function pathSelector(element: Element): string {
+        const parts: string[] = [];
+        let cursor: Element | null = element;
+        while (cursor && cursor.tagName.toLowerCase() !== "html") {
+          let part = cursor.tagName.toLowerCase();
+          if (cursor.id) {
+            part += `#${cssEscape(cursor.id)}`;
+            parts.unshift(part);
+            break;
+          }
+          const siblings = cursor.parentElement ? [...cursor.parentElement.children].filter((child) => child.tagName === cursor!.tagName) : [];
+          if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(cursor) + 1})`;
+          parts.unshift(part);
+          cursor = cursor.parentElement;
+        }
+        return parts.join(" > ");
+      }
+
+      function dataAttributes(element: Element): Record<string, string> {
+        const result: Record<string, string> = {};
+        for (const attribute of [...element.attributes]) {
+          if (attribute.name.startsWith("data-")) result[attribute.name] = attribute.value;
+        }
+        return result;
+      }
+
+      function attributes(element: Element): Record<string, string> {
+        const result: Record<string, string> = {};
+        for (const attribute of [...element.attributes]) result[attribute.name] = attribute.value;
+        return result;
+      }
+
+      function bestSelector(element: Element, index: number): string {
+        if (element.id) return `#${cssEscape(element.id)}`;
+        const testId = element.getAttribute("data-testid");
+        if (testId) return attrSelector("data-testid", testId);
+        const action = element.getAttribute("data-action");
+        if (action) return attrSelector("data-action", action);
+        const nav = element.getAttribute("data-nav");
+        if (nav) return attrSelector("data-nav", nav);
+        const aria = element.getAttribute("aria-label");
+        if (aria) return attrSelector("aria-label", aria);
+        if (element.classList.length > 0) return `${element.tagName.toLowerCase()}.${[...element.classList].map(cssEscape).join(".")}`;
+        return pathSelector(element) || `${element.tagName.toLowerCase()}:nth-of-type(${index + 1})`;
+      }
+
+      return [...document.querySelectorAll("a,button,input,select,textarea,span,div,p,strong,label,[id],[class],[role='button'],[data-testid],[data-action],[data-nav]")]
+        .map((element, index) => {
+          const rect = element.getBoundingClientRect();
+          const style = window.getComputedStyle(element);
+          const visible = rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+          return {
+            selector: bestSelector(element, index),
+            tagName: element.tagName.toLowerCase(),
+            id: element.id ?? "",
+            classes: [...element.classList],
+            text: element.textContent?.trim() ?? "",
+            attributes: attributes(element),
+            dataAttributes: dataAttributes(element),
+            ariaLabel: element.getAttribute("aria-label") ?? "",
+            role: element.getAttribute("role") ?? "",
+            name: element.getAttribute("name") ?? "",
+            placeholder: element.getAttribute("placeholder") ?? "",
+            type: element.getAttribute("type") ?? "",
+            parentText: element.parentElement?.textContent?.trim().slice(0, 200) ?? "",
+            siblingText: `${element.previousElementSibling?.textContent?.trim() ?? ""} ${element.nextElementSibling?.textContent?.trim() ?? ""}`.trim(),
+            visible,
+            childElementCount: element.children.length,
+          };
+        })
+        .filter((candidate) => candidate.visible);
+    });
+  }
+
+  private scoreCandidate(originalSelector: string, context: HealingContext, candidate: HealingCandidate): {
+    candidate: HealingCandidate;
+    score: number;
+    breakdown: Record<string, number>;
+  } {
+    const selectorTokens = this.tokens(originalSelector);
+    const contextTokens = this.tokens([context.locatorKey, context.action, context.stepLabel, context.stepId].filter(Boolean).join(" "));
+    const candidateTokens = this.tokens([
+      candidate.selector,
+      candidate.id,
+      candidate.classes.join(" "),
+      candidate.text,
+      candidate.ariaLabel,
+      candidate.role,
+      candidate.name,
+      candidate.placeholder,
+      candidate.type,
+      Object.entries(candidate.dataAttributes).map(([key, value]) => `${key} ${value}`).join(" "),
+      candidate.parentText,
+      candidate.siblingText,
+    ].join(" "));
+
+    const breakdown = {
+      selector: this.distinctiveOverlap(selectorTokens, candidateTokens),
+      context: this.overlap(contextTokens, candidateTokens),
+      action: this.actionCompatibility(context.action, candidate),
+      attributes: this.attributeSimilarity(originalSelector, candidate),
+      text: this.overlap(this.tokens(context.stepLabel), this.tokens(candidate.text)),
+      leaf: this.leafCompatibility(context.action, candidate),
+    };
+    let score =
+      breakdown.selector * 0.30 +
+      breakdown.context * 0.25 +
+      breakdown.action * 0.15 +
+      breakdown.attributes * 0.15 +
+      breakdown.text * 0.05 +
+      breakdown.leaf * 0.10;
+    if (context.action?.startsWith("extract:") && candidate.childElementCount > 0) {
+      score *= 0.75;
+    }
+    return { candidate, score, breakdown };
+  }
+
+  private leafCompatibility(action: string | undefined, candidate: HealingCandidate): number {
+    if (!action?.startsWith("extract:")) return 0.5;
+    if (candidate.childElementCount > 0) return 0;
+    if (candidate.text.length > 120) return 0.25;
+    return 1;
+  }
+
+  private actionCompatibility(action: string | undefined, candidate: HealingCandidate): number {
+    if (!action) return 0.5;
+    if (action.startsWith("extract:")) {
+      if (["button", "a", "input", "select", "textarea"].includes(candidate.tagName)) return 0.2;
+      if (candidate.childElementCount > 0) return 0.2;
+      return candidate.text ? 1 : 0.4;
+    }
+    if (action === "click" || action === "hover") return ["a", "button"].includes(candidate.tagName) || candidate.role === "button" ? 1 : 0.25;
+    if (action === "fill") return ["input", "textarea"].includes(candidate.tagName) ? 1 : 0.1;
+    if (action === "select") return candidate.tagName === "select" ? 1 : 0.1;
+    if (action === "check" || action === "uncheck") return candidate.type === "checkbox" || candidate.type === "radio" ? 1 : 0.1;
+    return 0.5;
+  }
+
+  private attributeSimilarity(originalSelector: string, candidate: HealingCandidate): number {
+    const values = [candidate.id, ...candidate.classes, ...Object.values(candidate.dataAttributes), ...Object.values(candidate.attributes)];
+    const originalTokens = this.tokens(originalSelector);
+    const attributeTokens = this.tokens(values.join(" "));
+    return this.distinctiveOverlap(originalTokens, attributeTokens);
+  }
+
+  private overlap(left: string[], right: string[]): number {
+    if (left.length === 0 || right.length === 0) return 0;
+    const rightSet = new Set(right);
+    return left.filter((token) => rightSet.has(token)).length / left.length;
+  }
+
+  private distinctiveOverlap(left: string[], right: string[]): number {
+    const distinctive = left.filter((token) => !this.isGenericToken(token));
+    return this.overlap(distinctive.length > 0 ? distinctive : left, right);
+  }
+
+  private isGenericToken(token: string): boolean {
+    return ["cart", "item", "page", "button", "link", "field", "input", "text", "value"].includes(token);
+  }
+
+  private tokens(value: string): string[] {
+    return value
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length > 1);
+  }
+
+  private toSelector(locatorInfo: LocatorInfo): string {
+    if (locatorInfo.cssSelector) return locatorInfo.cssSelector;
+    if (locatorInfo.xpath) return `xpath=${locatorInfo.xpath}`;
+    if (locatorInfo.testId) return `data-testid=${locatorInfo.testId}`;
+    if (locatorInfo.text) return `text=${locatorInfo.text}`;
+    if (locatorInfo.role) return `role=${locatorInfo.role}`;
+    if (locatorInfo.id) return `#${locatorInfo.id}`;
+    if (locatorInfo.className) return `.${locatorInfo.className}`;
+    return "unknown-locator";
+  }
+
+  private record(result: HealingResult): HealingResult {
+    this.appendArtifact(result);
+    return result;
+  }
+
+  private appendArtifact(result: HealingResult): void {
+    try {
+      const artifactPath = path.resolve(this.config.healing.artifactPath);
+      fs.mkdirSync(path.dirname(artifactPath), { recursive: true });
+      fs.appendFileSync(artifactPath, `${JSON.stringify(result)}\n`, "utf8");
+    } catch {
+      // Healing must never fail the test because artifact writing failed.
+    }
+  }
+}

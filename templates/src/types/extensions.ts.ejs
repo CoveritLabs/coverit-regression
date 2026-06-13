@@ -1,0 +1,46 @@
+import type { Page } from "@playwright/test";
+
+import type { BaseGeneratedState } from "@/states/generated";
+import type { BaseGeneratedTransition } from "@/transitions/generated";
+import type { AssertionSeverity } from "@/types/assertion";
+
+export interface AssertionFunctionResult {
+  passed: boolean;
+  message: string;
+  severity?: AssertionSeverity;
+  details?: unknown;
+}
+
+export interface AssertionFunctionContext {
+  page: unknown;
+  store: {
+    get(key: string): unknown;
+    snapshot(): Record<string, unknown>;
+  };
+  extracts: Record<string, unknown>;
+  evaluate(expression: string, context?: Record<string, unknown>): unknown;
+}
+
+export type AssertionFunction = (
+  context: AssertionFunctionContext,
+  args?: Record<string, unknown>,
+) => Promise<AssertionFunctionResult> | AssertionFunctionResult;
+
+export interface DesignFunctionContext {
+  store: {
+    get(key: string): unknown;
+    set(key: string, value: unknown): void;
+    snapshot(): Record<string, unknown>;
+  };
+  extracts: Record<string, unknown>;
+  evaluate(expression: string, context?: Record<string, unknown>): unknown;
+}
+
+export type DesignFunction = (
+  context: DesignFunctionContext,
+  args?: Record<string, unknown>,
+) => Promise<unknown> | unknown;
+
+export type ExtensionHook = (page: Page) => Promise<void> | void;
+export type StateFactory = (id: string) => BaseGeneratedState;
+export type TransitionFactory = (id: string) => BaseGeneratedTransition;

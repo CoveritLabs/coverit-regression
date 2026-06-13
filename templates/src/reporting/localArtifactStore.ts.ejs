@@ -1,0 +1,40 @@
+import fs from "fs";
+import path from "path";
+
+import { CoveritConfig } from "@/types";
+
+export class LocalArtifactStore {
+  private readonly root: string;
+
+  constructor(config: CoveritConfig, runId: string) {
+    this.root = path.join(config.run.artifactRoot, runId);
+  }
+
+  appendLog(message: string): void {
+    this.append("events/log.txt", `${new Date().toISOString()} ${message}\n`);
+  }
+
+  appendEvent(event: unknown): void {
+    this.append("events/events.jsonl", `${JSON.stringify(event)}\n`);
+  }
+
+  saveFailure(failure: unknown): void {
+    this.write(`failures/${Date.now()}-failure.json`, JSON.stringify(failure, null, 2));
+  }
+
+  saveSummary(summary: unknown): void {
+    this.write("results/runner-summary.json", JSON.stringify(summary, null, 2));
+  }
+
+  private append(relativePath: string, content: string): void {
+    const filePath = path.join(this.root, relativePath);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.appendFileSync(filePath, content, "utf8");
+  }
+
+  private write(relativePath: string, content: string): void {
+    const filePath = path.join(this.root, relativePath);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, content, "utf8");
+  }
+}

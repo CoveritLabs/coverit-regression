@@ -1,0 +1,29 @@
+import type { AssertionResult } from "@/types/runtime";
+
+export type ScenarioStatus = "running" | "passed" | "failed";
+export type StepStatus = "running" | "passed" | "failed";
+
+export interface RunIdentity {
+  runId: string;
+  projectId?: string;
+  featureName?: string;
+  scenarioName?: string;
+}
+
+export interface StepReport {
+  stepType: string;
+  id: string;
+  label: string;
+  results: AssertionResult[];
+  allPassed: boolean;
+}
+
+export interface RunSummary {
+  status: "passed" | "failed";
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  totals: { passed: number; failed: number; warnings: number };
+  reports: StepReport[];
+}
+

@@ -1,0 +1,238 @@
+import { Page } from "@playwright/test";
+
+import { failed, passed } from "@/core/assertionResult";
+import { createLocator, resolveLocatorInfo } from "@/core/locatorResolver";
+import { assertionFunctions, designFunctions } from "@/extensions";
+import { HealingEngine } from "@/healing/healingEngine";
+import {
+  AssertionResult,
+  DesignClassInfo,
+  DesignExtractDefinition,
+  DesignOperationDefinition,
+  DesignStoreValueSpec,
+  HealingContext,
+  HealingInfo,
+  LocatorInfo,
+} from "@/types";
+import { DesignClassStore } from "@/design/designClassStore";
+import { ExpressionEvaluator } from "@/design/expressionEvaluator";
+
+export class DesignClassRuntime {
+  readonly store: DesignClassStore;
+  private readonly evaluator = new ExpressionEvaluator();
+  private healingEngine = new HealingEngine();
+  private healingContext: Partial<HealingContext> = {};
+  private extractionHealing: HealingInfo[] = [];
+
+  constructor(readonly definition: DesignClassInfo) {
+    this.store = new DesignClassStore();
+    for (const [key, slot] of Object.entries(definition.store ?? {})) this.store.set(key, slot.initialValue);
+  }
+
+  injectHealingEngine(healingEngine: HealingEngine): void {
+    this.healingEngine = healingEngine;
+  }
+
+  setHealingContext(context: Partial<HealingContext>): void {
+    this.healingContext = context;
+  }
+
+  async executeOperation(operationId: string, page: Page, args?: Record<string, unknown>): Promise<AssertionResult> {
+    const operation = this.definition.operations?.[operationId];
+    if (!operation) return failed("Design Operation", `Unknown design operation "${operationId}".`);
+
+    try {
+      this.extractionHealing = [];
+      return await this.runOperation(operationId, operation, page, args);
+    } catch (error) {
+      return failed(`Design Operation: ${operationId}`, (error as Error).message, "blocking", undefined, this.consumeHealingInfo());
+    }
+  }
+
+  async assertOperation(operationId: string, page: Page, args?: Record<string, unknown>): Promise<AssertionResult> {
+    return this.executeOperation(operationId, page, args);
+  }
+
+  async extract(extractId: string, page: Page): Promise<unknown> {
+    const extract = this.definition.extracts?.[extractId];
+    if (!extract) throw new Error(`Unknown extract "${extractId}".`);
+    return this.extractValue(extract, page);
+  }
+
+  evaluate(expression: string, context: Record<string, unknown> = {}): unknown {
+    return this.evaluator.evaluate(expression, { ...this.store.snapshot(), ...context });
+  }
+
+  private async runOperation(
+    operationId: string,
+    operation: DesignOperationDefinition,
+    page: Page,
+    args?: Record<string, unknown>,
+  ): Promise<AssertionResult> {
+    if (operation.type === "set") {
+      this.store.set(operation.key, await this.resolveValue(operation.value, page));
+      return passed(`Design Operation: ${operationId}`, `Set "${operation.key}".`, "blocking", this.consumeHealingInfo());
+    }
+
+    if (operation.type === "append") {
+      this.store.append(operation.key, await this.resolveValue(operation.value, page));
+      return passed(`Design Operation: ${operationId}`, `Appended "${operation.key}".`, "blocking", this.consumeHealingInfo());
+    }
+
+    if (operation.type === "putMap") {
+      this.store.putMap(operation.key, String(await this.resolveValue(operation.mapKey, page)), await this.resolveValue(operation.value, page));
+      return passed(`Design Operation: ${operationId}`, `Updated map "${operation.key}".`, "blocking", this.consumeHealingInfo());
+    }
+
+    if (operation.type === "assert-expression") {
+      const expression = this.definition.expressions?.[operation.expressionId]?.expression;
+      if (!expression) throw new Error(`Unknown expression "${operation.expressionId}".`);
+      const ok = this.evaluate(expression, await this.extractReferencedValues(expression, page)) === true;
+      return ok
+        ? passed(`Design Assertion: ${operationId}`, expression, operation.severity ?? "blocking", this.consumeHealingInfo())
+        : failed(`Design Assertion: ${operationId}`, expression, operation.severity ?? "blocking", undefined, this.consumeHealingInfo());
+    }
+
+    const fn = designFunctions[operation.functionId];
+    if (!fn) throw new Error(`Design function "${operation.functionId}" is not registered.`);
+    const value = await fn(this.functionContext(page), operation.args ?? args);
+    if (operation.assignTo) this.store.set(operation.assignTo, value);
+    return passed(`Design Operation: ${operationId}`, `Called function "${operation.functionId}".`, "blocking", this.consumeHealingInfo());
+  }
+
+  async runAssertionFunction(functionId: string, page: Page, args?: Record<string, unknown>): Promise<AssertionResult> {
+    const fn = assertionFunctions[functionId];
+    if (!fn) return failed("Assertion Function", `Assertion function "${functionId}" is not registered.`);
+    const result = await fn(
+      {
+        page,
+        store: { get: (key) => this.store.get(key), snapshot: () => this.store.snapshot() },
+        extracts: await this.extractAll(page),
+        evaluate: (expression, context) => this.evaluate(expression, context),
+      },
+      args,
+    );
+    return result.passed
+      ? passed(`Assertion Function: ${functionId}`, result.message, result.severity ?? "blocking")
+      : failed(`Assertion Function: ${functionId}`, result.message, result.severity ?? "blocking", JSON.stringify(result.details));
+  }
+
+  private async resolveValue(spec: DesignStoreValueSpec, page: Page): Promise<unknown> {
+    if ("from" in spec) return this.extract(spec.from, page);
+    if ("literal" in spec) return spec.literal;
+    if ("expressionId" in spec) {
+      const expression = this.definition.expressions?.[spec.expressionId]?.expression;
+      if (!expression) throw new Error(`Unknown expression "${spec.expressionId}".`);
+      return this.evaluate(expression);
+    }
+    if ("functionId" in spec) {
+      const fn = designFunctions[spec.functionId];
+      if (!fn) throw new Error(`Design function "${spec.functionId}" is not registered.`);
+      return fn(this.functionContext(page), spec.args);
+    }
+
+    const value: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(spec.fields)) value[key] = await this.resolveValue(child, page);
+    return value;
+  }
+
+  private async extractValue(definition: DesignExtractDefinition, page: Page): Promise<unknown> {
+    const locatorInfo = resolveLocatorInfo(definition.locator, definition.stateId, definition.locatorKey);
+    if (!locatorInfo) throw new Error("Extract definition is missing locator information.");
+
+    const locator = await this.locatorFor(page, locatorInfo, definition);
+    if (definition.source === "list") {
+      const rows = await locator.all();
+      const items: Record<string, unknown>[] = [];
+      for (const row of rows) {
+        const item: Record<string, unknown> = {};
+        for (const [field, child] of Object.entries(definition.itemFields ?? {})) {
+          const childLocatorInfo = resolveLocatorInfo(child.locator, definition.stateId, child.locatorKey) ?? locatorInfo;
+          const childLocator = childLocatorInfo.cssSelector
+            ? row.locator(childLocatorInfo.cssSelector).first()
+            : childLocatorInfo.xpath
+              ? row.locator(`xpath=${childLocatorInfo.xpath}`).first()
+              : createLocator(page, childLocatorInfo).first();
+          item[field] = this.normalize(await this.readLocator(childLocator, child.source === "attribute" ? child.attributeName : undefined), child.valueType);
+        }
+        items.push(item);
+      }
+      return items;
+    }
+
+    return this.normalize(await this.readLocator(locator.first(), definition.source === "attribute" ? definition.attributeName : undefined), definition.valueType);
+  }
+
+  private async locatorFor(page: Page, locatorInfo: LocatorInfo, definition: Pick<DesignExtractDefinition, "stateId" | "locatorKey" | "source">) {
+    const healing = await this.healingEngine.findElement(page, locatorInfo, {
+      featureName: this.healingContext.featureName,
+      scenarioName: this.healingContext.scenarioName,
+      stepType: this.healingContext.stepType ?? "DESIGN_EXTRACT",
+      stepId: this.healingContext.stepId ?? definition.locatorKey ?? "design-extract",
+      stepLabel: this.healingContext.stepLabel ?? definition.locatorKey ?? "Design extract",
+      action: `extract:${definition.source}`,
+      stateId: definition.stateId,
+      locatorKey: definition.locatorKey,
+    });
+    if (healing.healed) {
+      this.extractionHealing.push({
+        wasHealed: true,
+        originalSelector: healing.originalSelector,
+        healedSelector: healing.healedSelector,
+        score: healing.score,
+        reason: healing.reason,
+        breakdown: healing.breakdown,
+      });
+      return page.locator(healing.healedSelector!).first();
+    }
+    return createLocator(page, locatorInfo);
+  }
+
+  private async readLocator(locator: ReturnType<Page["locator"]>, attributeName?: string): Promise<unknown> {
+    if (attributeName) return locator.getAttribute(attributeName);
+    return locator.textContent();
+  }
+
+  private normalize(value: unknown, valueType?: string): unknown {
+    if (typeof value === "string") value = value.trim();
+    if (valueType === "number" || valueType === "currency") {
+      const parsed = Number(String(value).replace(/[^0-9.-]/g, ""));
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    if (valueType === "boolean") return value === true || value === "true";
+    return value;
+  }
+
+  private async extractAll(page: Page): Promise<Record<string, unknown>> {
+    const values: Record<string, unknown> = {};
+    for (const key of Object.keys(this.definition.extracts ?? {})) values[key] = await this.extract(key, page);
+    return values;
+  }
+
+  private async extractReferencedValues(expression: string, page: Page): Promise<Record<string, unknown>> {
+    const values: Record<string, unknown> = {};
+    for (const key of Object.keys(this.definition.extracts ?? {})) {
+      if (new RegExp(`\\b${key}\\b`).test(expression)) values[key] = await this.extract(key, page);
+    }
+    return values;
+  }
+
+  private consumeHealingInfo(): HealingInfo | undefined {
+    const healing = this.extractionHealing.shift();
+    this.extractionHealing = [];
+    return healing;
+  }
+
+  private functionContext(page: Page) {
+    return {
+      page,
+      store: {
+        get: (key: string) => this.store.get(key),
+        set: (key: string, value: unknown) => this.store.set(key, value),
+        snapshot: () => this.store.snapshot(),
+      },
+      extracts: {},
+      evaluate: (expression: string, context?: Record<string, unknown>) => this.evaluate(expression, context),
+    };
+  }
+}

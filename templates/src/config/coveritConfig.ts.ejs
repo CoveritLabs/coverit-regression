@@ -1,0 +1,36 @@
+import fs from "fs";
+import path from "path";
+
+import { CoveritConfig } from "@/types";
+
+export function loadCoveritConfig(configPath = "coverit.config.json"): CoveritConfig {
+  const absolutePath = path.resolve(configPath);
+  if (!fs.existsSync(absolutePath)) {
+    throw new Error(`CoverIt config was not found at "${absolutePath}". Generate or restore coverit.config.json.`);
+  }
+
+  try {
+    return resolveConfig(JSON.parse(fs.readFileSync(absolutePath, "utf8")) as CoveritConfig);
+  } catch (error) {
+    throw new Error(`CoverIt config at "${absolutePath}" is invalid: ${(error as Error).message}`);
+  }
+}
+
+export function getCoveritRunId(config = loadCoveritConfig()): string {
+  const envRunId = config.run.idEnv ? process.env[config.run.idEnv] : undefined;
+  if (envRunId) return envRunId;
+  if (config.run.id) return config.run.id;
+  const generated = `local-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  process.env[config.run.idEnv ?? "COVERIT_RUN_ID"] = generated;
+  return generated;
+}
+
+function resolveConfig(config: CoveritConfig): CoveritConfig {
+  if (!config.application?.baseUrl) throw new Error("coverit.config.json must define application.baseUrl.");
+  if (!config.run?.artifactRoot) throw new Error("coverit.config.json must define run.artifactRoot.");
+  if (!config.api) throw new Error("coverit.config.json must define api settings.");
+  if (!config.reporting) throw new Error("coverit.config.json must define reporting settings.");
+  if (!config.healing) throw new Error("coverit.config.json must define healing settings.");
+  const apiKey = config.api.apiKeyEnv ? process.env[config.api.apiKeyEnv] : undefined;
+  return { ...config, api: { ...config.api, apiKey: config.api.apiKey ?? apiKey } };
+}

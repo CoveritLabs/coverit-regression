@@ -1,0 +1,21 @@
+import { Page, Locator } from "@playwright/test";
+
+import { STATE_LOCATORS } from "@/metadata";
+import { LocatorInfo } from "@/types";
+
+export function resolveLocatorInfo(locator?: LocatorInfo, stateId?: string, locatorKey?: string): LocatorInfo | undefined {
+  if (locator) return locator;
+  if (!stateId || !locatorKey) return undefined;
+  return (STATE_LOCATORS as Record<string, Record<string, LocatorInfo>>)[stateId]?.[locatorKey];
+}
+
+export function createLocator(page: Page, locator: LocatorInfo): Locator {
+  if (locator.cssSelector) return page.locator(locator.cssSelector);
+  if (locator.xpath) return page.locator(`xpath=${locator.xpath}`);
+  if (locator.testId) return page.getByTestId(locator.testId);
+  if (locator.text) return page.getByText(locator.text);
+  if (locator.role) return page.getByRole(locator.role as Parameters<Page["getByRole"]>[0]);
+  if (locator.id) return page.locator(`#${locator.id}`);
+  if (locator.className) return page.locator(`.${locator.className}`);
+  throw new Error("Locator definition must include cssSelector, xpath, testId, text, role, id, or className.");
+}

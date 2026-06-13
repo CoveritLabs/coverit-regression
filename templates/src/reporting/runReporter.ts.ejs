@@ -1,0 +1,51 @@
+import { getCoveritRunId, loadCoveritConfig } from "@/config/coveritConfig";
+import { LocalArtifactStore } from "@/reporting/localArtifactStore";
+import { AssertionResult, RunIdentity, RunSummary, ScenarioStatus, StepReport, StepStatus } from "@/types";
+
+export class RunReporter {
+  private readonly artifactStore?: LocalArtifactStore;
+  private readonly identity: RunIdentity;
+
+  constructor(identity: Partial<RunIdentity> = {}, config = loadCoveritConfig()) {
+    const runId = identity.runId ?? getCoveritRunId(config);
+    this.artifactStore = config.reporting.localArtifactsEnabled ? new LocalArtifactStore(config, runId) : undefined;
+    this.identity = { runId, projectId: config.run.projectId, ...identity };
+  }
+
+  async scenarioStatus(status: ScenarioStatus): Promise<void> {
+    this.event("scenario.status", { status });
+  }
+
+  async stepStatus(report: Pick<StepReport, "id" | "label" | "stepType">, status: StepStatus): Promise<void> {
+    this.event("step.status", { status, stepId: report.id, stepLabel: report.label, stepType: report.stepType });
+  }
+
+  async assertionResult(report: Pick<StepReport, "id" | "label" | "stepType">, result: AssertionResult): Promise<void> {
+    this.event("assertion.result", { stepId: report.id, stepLabel: report.label, stepType: report.stepType, result });
+    if (!result.passed && result.severity === "blocking") this.failure({ report, result });
+  }
+
+  async log(message: string, level: "info" | "warning" | "error" = "info"): Promise<void> {
+    this.artifactStore?.appendLog(`[${level.toUpperCase()}] ${message}`);
+    this.event("log", { level, message });
+  }
+
+  async failure(failure: unknown): Promise<void> {
+    this.artifactStore?.saveFailure(failure);
+    this.event("failure", failure);
+  }
+
+  async saveSummary(summary: RunSummary): Promise<void> {
+    this.artifactStore?.saveSummary(summary);
+  }
+
+  private event(type: string, payload: unknown): void {
+    this.artifactStore?.appendEvent({
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      type,
+      timestamp: new Date().toISOString(),
+      ...this.identity,
+      payload,
+    });
+  }
+}

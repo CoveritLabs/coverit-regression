@@ -19,6 +19,61 @@
       "description": "Generated transition implementations."
     },
     {
+      "path": "src/bdd/**",
+      "mode": "static",
+      "description": "BDD runtime parser and loader."
+    },
+    {
+      "path": "src/constants/**",
+      "mode": "static",
+      "description": "Generated framework runtime constants."
+    },
+    {
+      "path": "src/config/**",
+      "mode": "static",
+      "description": "Generated framework configuration loader."
+    },
+    {
+      "path": "src/core/**",
+      "mode": "static",
+      "description": "Generated framework runtime core."
+    },
+    {
+      "path": "src/design/**",
+      "mode": "static",
+      "description": "Singular design class runtime."
+    },
+    {
+      "path": "src/healing/**",
+      "mode": "static",
+      "description": "Selector healing runtime support."
+    },
+    {
+      "path": "src/registry/**",
+      "mode": "static",
+      "description": "Generated framework registry."
+    },
+    {
+      "path": "src/reporting/**",
+      "mode": "static",
+      "description": "Generated framework reporting support."
+    },
+    {
+      "path": "tests/**",
+      "mode": "static",
+      "description": "Generated Playwright regression specs."
+    },
+    {
+      "path": "package.json",
+      "mode": "static",
+      "description": "Generated framework package manifest."
+    },
+    {
+      "path": "playwright.config.ts",
+      "mode": "static",
+      "description": "Generated framework Playwright config."
+    },
+    {
       "path": "src/extensions/*.ts",
       "mode": "user-extension",
       "createIfMissing": true,

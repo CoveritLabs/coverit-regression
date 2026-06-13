@@ -1,17 +1,8 @@
+import { BaseTransition } from "@/core/baseTransition";
 import { TransitionInfo } from "@/types";
 
-export abstract class BaseGeneratedTransition {
-  readonly id: string;
-  readonly dbId: string;
-  readonly label: string;
-  readonly className: string;
-  readonly action: TransitionInfo["action"];
-
-  protected constructor(readonly definition: TransitionInfo) {
-    this.id = definition.id;
-    this.dbId = definition.dbId;
-    this.label = definition.label;
-    this.className = definition.className;
-    this.action = definition.action;
+export abstract class BaseGeneratedTransition extends BaseTransition {
+  protected constructor(definition: TransitionInfo) {
+    super(definition);
   }
 }

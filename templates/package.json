@@ -1,0 +1,20 @@
+{
+  "name": "coverit-generated-regression",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "report": "playwright show-report reports/playwright-report"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.43.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  }
+}
+
