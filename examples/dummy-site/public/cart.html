@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Shop — Cart</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;font-family:sans-serif}
+    body{background:#f5f5f5;display:flex;flex-direction:column;align-items:center;padding:40px 20px}
+    header{width:100%;max-width:800px;display:flex;justify-content:space-between;align-items:center;margin-bottom:40px}
+    header h1{font-size:24px;color:#333}
+    nav a{margin-left:16px;text-decoration:none;color:#555;font-size:14px}
+    .cart-container{background:white;border-radius:12px;padding:32px;max-width:600px;width:100%;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+    .cart-container h2{font-size:20px;color:#222;margin-bottom:24px;border-bottom:1px solid #eee;padding-bottom:12px}
+    .cart-item{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid #f0f0f0}
+    .cart-item-name{font-size:16px;color:#333}
+    .cart-item-price{font-size:16px;color:#2563eb;font-weight:600}
+    .cart-summary{margin-top:24px;display:flex;justify-content:space-between;align-items:center}
+    .cart-summary .label{font-size:16px;color:#555;font-weight:600}
+    .cart-total{font-size:24px;font-weight:700;color:#222}
+    #checkout-btn{margin-top:32px;background:#16a34a;color:white;border:none;border-radius:8px;padding:14px 32px;font-size:16px;font-weight:600;cursor:pointer;width:100%}
+    #checkout-btn:hover{background:#15803d}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🛍️ MyShop</h1>
+    <nav><a href="/">Home</a><a href="/cart">Cart</a></nav>
+  </header>
+  <div class="cart-container">
+    <h2>🛒 Your Cart</h2>
+    <div id="cart-items"></div>
+    <div class="cart-summary">
+      <span class="label">Total</span>
+      <span class="cart-total" id="cart-total">$0.00</span>
+    </div>
+    <button id="checkout-btn">Proceed to Checkout</button>
+  </div>
+  <script>
+    const cartData = JSON.parse(sessionStorage.getItem("cart") || "[]");
+    const itemsEl = document.getElementById("cart-items");
+    const totalEl = document.getElementById("cart-total");
+    let total = 0;
+    cartData.forEach(item => {
+      total += item.price;
+      itemsEl.innerHTML += `<div class="cart-item"><span class="cart-item-name">${item.name}</span><span class="cart-item-price">$${item.price.toFixed(2)}</span></div>`;
+    });
+    totalEl.textContent = `$${total.toFixed(2)}`;
+    document.getElementById("checkout-btn").addEventListener("click", () => {
+      window.location.href = "/checkout";
+    });
+  </script>
+</body>
+</html>
