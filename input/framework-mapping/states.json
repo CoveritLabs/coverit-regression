@@ -9,10 +9,13 @@
     "dom": {
       "elements": {
         "itemPrice": {
-          "cssSelector": "[data-testid='item-price']"
+          "cssSelector": ".product-price"
         },
         "cartButton": {
-          "cssSelector": "[data-testid='cart-button']"
+          "cssSelector": "#add-to-cart"
+        },
+        "cartNavLink": {
+          "cssSelector": "[data-nav='cart']"
         }
       }
     }
@@ -36,7 +39,7 @@
           "cssSelector": ".cart-item-price"
         },
         "cartTotal": {
-          "cssSelector": "#total-amount"
+          "cssSelector": "#cart-total"
         }
       }
     }

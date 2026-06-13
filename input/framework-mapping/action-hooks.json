@@ -20,5 +20,30 @@
       "type": "design-operation",
       "operationId": "appendCartItem"
     }
+  },
+  "H_OPEN_CART_LINK": {
+    "id": "H_OPEN_CART_LINK",
+    "type": "ACTION_HOOK",
+    "label": "Open cart page",
+    "timing": "post",
+    "targetId": "T_OPEN_CART",
+    "definition": {
+      "type": "element-interaction",
+      "action": "click",
+      "stateId": "S_HOME",
+      "locatorKey": "cartNavLink"
+    }
+  },
+  "H_WAIT_CART_STORAGE": {
+    "id": "H_WAIT_CART_STORAGE",
+    "type": "ACTION_HOOK",
+    "label": "Wait for cart storage",
+    "timing": "post",
+    "targetId": "T_OPEN_CART",
+    "definition": {
+      "type": "utility",
+      "action": "wait",
+      "durationMs": 300
+    }
   }
 }
