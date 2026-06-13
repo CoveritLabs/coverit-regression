@@ -16,4 +16,5 @@ export const PATHS = {
   FRAMEWORK_MAPPING: path.join(PROJECT_ROOT, "input", "framework-mapping"),
   TEMPLATES: path.join(PROJECT_ROOT, "templates"),
   MATERIALIZED_TEMPLATES: path.join(PROJECT_ROOT, ".generated", "templates"),
+  CONFIG_FILE: path.join(PROJECT_ROOT, "config.yaml"),
 } as const;

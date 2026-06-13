@@ -10,8 +10,8 @@ import { logger } from "@utils/logger";
 class ManifestReader {
   private manifestPath: string;
 
-  constructor() {
-    const existingManifest = FileHandler.join(PATHS.OUTPUT, "manifest.json");
+  constructor(outputPath: string = PATHS.OUTPUT) {
+    const existingManifest = FileHandler.join(outputPath, "manifest.json");
     if (FileHandler.exists(existingManifest)) this.manifestPath = existingManifest;
     else this.manifestPath = FileHandler.join(PATHS.TEMPLATES, "manifest.json");
   }

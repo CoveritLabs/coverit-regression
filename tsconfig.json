@@ -16,6 +16,9 @@
       "@/*": [
         "src/*"
       ],
+      "@generator/*": [
+        "src/generator/*"
+      ],
       "@constants/*": [
         "src/constants/*"
       ],
@@ -27,6 +30,9 @@
       ],
       "@planner/*": [
         "src/planner/*"
+      ],
+      "@workflow/*": [
+        "src/workflow/*"
       ]
     }
   },
