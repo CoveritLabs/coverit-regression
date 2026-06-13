@@ -14,6 +14,7 @@ export enum FileOwnershipMode {
   Static = "static",
   Dynamic = "dynamic",
   UserExtension = "user-extension",
+  INPUT = "input",
 }
 
 export interface FileEntry {
