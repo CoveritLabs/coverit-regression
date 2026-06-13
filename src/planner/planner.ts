@@ -33,19 +33,32 @@ class Planner {
 
   plan(): FileOperation[] {
     const operations: FileOperation[] = [];
-    for (const template of this.templates) {
-      const rule = this.findMatchingRule(template.relativePath);
-      const mode = rule ? rule.mode : FileOwnershipMode.Static;
-      const targetPath = this.getTargetPath(template.relativePath);
-      const operation = this.createOperation(template.absolutePath, targetPath, template.relativePath, mode);
+    operations.push(...this.createOperations(this.templates));
+    operations.push(
+      ...this.createOperations(this.features, FileOwnershipMode.INPUT, FileHandler.join(PATHS.OUTPUT, "features")),
+    );
+    return operations;
+  }
+
+  private createOperations(
+    files: FileEntry[],
+    defaultMode: FileOwnershipMode = FileOwnershipMode.Static,
+    rootPath: string = PATHS.OUTPUT,
+  ): FileOperation[] {
+    const operations: FileOperation[] = [];
+    for (const file of files) {
+      const rule = this.findMatchingRule(file.relativePath);
+      const mode = rule ? rule.mode : defaultMode;
+      const targetPath = this.getTargetPath(file.relativePath, rootPath);
+      const operation = this.createOperation(file.absolutePath, targetPath, file.relativePath, mode);
       operations.push(operation);
     }
 
     return operations;
   }
 
-  private getTargetPath(relativePath: string): string {
-    return FileHandler.join(PATHS.OUTPUT, ...relativePath.split(PATH_SEPARATOR));
+  private getTargetPath(relativePath: string, rootPath: string = PATHS.OUTPUT): string {
+    return FileHandler.join(rootPath, ...relativePath.split(PATH_SEPARATOR));
   }
 
   private findMatchingRule(relativePath: string): ManifestFileRule {
@@ -77,6 +90,18 @@ class Planner {
         sourcePath,
         targetPath,
         reason: "User extension file already exists and is preserved.",
+      };
+    }
+
+    const source = FileHandler.readFile(sourcePath);
+    const target = FileHandler.readFile(targetPath);
+    if (Buffer.from(source).equals(Buffer.from(target))) {
+      return {
+        kind: FileOperationKind.Unchanged,
+        mode,
+        sourcePath,
+        targetPath,
+        reason: "Target file already exists and is unchanged.",
       };
     }
 
