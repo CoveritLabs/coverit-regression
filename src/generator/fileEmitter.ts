@@ -6,7 +6,7 @@ import ejs from "ejs";
 
 import { PATH_SEPARATOR } from "@constants/common";
 import { PATHS } from "@constants/paths";
-import { FileEntry } from "@/types/files";
+import { FileEntry, FileOperation, FileOperationKind } from "@/types/files";
 import { TemplateRenderContext } from "@/types/templates";
 import FileHandler from "@utils/files";
 import { logger } from "@utils/logger";
@@ -26,6 +26,26 @@ class FileEmitter {
 
     logger.info(`[File Emitter] Materialized ${emitted.length} template file(s) in ${PATHS.MATERIALIZED_TEMPLATES}.`);
     return emitted.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+  }
+
+  applyOperations(operations: FileOperation[], dryRun: boolean, check: boolean): boolean {
+    let hasChanges = false;
+
+    for (const operation of operations) {
+      if (operation.kind === FileOperationKind.Create || operation.kind === FileOperationKind.Update) {
+        hasChanges = true;
+      }
+
+      if (dryRun || check) continue;
+
+      if (operation.kind === FileOperationKind.Create || operation.kind === FileOperationKind.Update) {
+        const content = operation.content ?? FileHandler.readFile(operation.sourcePath);
+        FileHandler.writeFile(operation.targetPath, content);
+        logger.info(`[File Emitter] Applied '${operation.kind}' to ${operation.targetPath}.`);
+      }
+    }
+
+    return hasChanges;
   }
 
   private async materializeTemplate(template: FileEntry, context: TemplateRenderContext | {}): Promise<FileEntry[]> {

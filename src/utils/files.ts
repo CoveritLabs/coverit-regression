@@ -20,6 +20,12 @@ class FileHandler {
     return fileEntries.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
   }
 
+  static removeDirectory(absolutePath: string): void {
+    if (this.isDirectory(absolutePath)) {
+      fs.rmSync(absolutePath, { recursive: true, force: true });
+    }
+  }
+
   static toRelativePath(absolutePath: string, root: string = PATHS.ROOT): string {
     return path.relative(root, absolutePath).split(path.sep).join(PATH_SEPARATOR);
   }

@@ -15,6 +15,9 @@ import Planner from "@planner/planner";
 import FileHandler from "@utils/files";
 import { logger } from "@utils/logger";
 import TemplateContextBuilder from "./templateContextBuilder";
+import { diagnostics } from "@/diagnostics/diagnostics";
+import GenerationRecordStore from "@planner/generationRecordStore";
+import BddMappingValidator from "@/validate/bddMappingValidator";
 
 class Generator {
   private readonly options: GeneratorOptions;
@@ -24,6 +27,8 @@ class Generator {
   private templateHandler: TemplateHandler;
   private templateContextBuilder: TemplateContextBuilder;
   private manifestReader: ManifestReader;
+  private generationRecordStore: GenerationRecordStore;
+  private bddMappingValidator: BddMappingValidator;
 
   constructor(options: GeneratorOptions) {
     this.options = options;
@@ -32,11 +37,14 @@ class Generator {
     this.frameworkMappingReader = new FrameworkMappingReader();
     this.templateHandler = new TemplateHandler();
     this.templateContextBuilder = new TemplateContextBuilder();
-    this.manifestReader = new ManifestReader();
+    this.manifestReader = new ManifestReader(options.outputPath);
+    this.generationRecordStore = new GenerationRecordStore();
+    this.bddMappingValidator = new BddMappingValidator();
   }
 
   createPlan(manifest: Manifest, features: FileEntry[], templates: FileEntry[]): FileOperation[] {
     const operations: FileOperation[] = new Planner()
+      .setOutputPath(this.options.outputPath)
       .setManifest(manifest)
       .setFeatures(features)
       .setTemplates(templates)
@@ -57,19 +65,30 @@ class Generator {
   }
 
   async generate(): Promise<boolean> {
+    diagnostics.clear();
     const manifest = this.manifestReader.read();
 
     const features = this.bddReader.scan();
-    this.parseFeatures(features);
+    const parsedFeatures = this.parseFeatures(features);
 
-    const model = this.frameworkMappingReader.readModel();
+    const mapping = this.frameworkMappingReader.read();
+    this.bddMappingValidator.validate(parsedFeatures, mapping);
+    const model = this.frameworkMappingReader.buildGeneratedFrameworkModel(mapping);
+
     const templateContext = this.templateContextBuilder.build(model);
     const templates = this.templateHandler.scan();
     const materializedTemplates = await this.fileEmitter.materialize(templates, { context: templateContext });
 
     logger.info("[Generator] Starting generation process...");
     const operations = this.createPlan(manifest, features, materializedTemplates);
-    return true;
+    const hasChanges = this.fileEmitter.applyOperations(operations, this.options.dryRun, this.options.check);
+
+    if (!this.options.dryRun && !this.options.check)
+      this.generationRecordStore.save(this.options.outputPath, operations);
+
+    diagnostics.print(logger);
+    logger.info(`[Generator] Generation process completed. Changes detected: ${hasChanges}.`);
+    return hasChanges;
   }
 
   private parseFeatures(features: FileEntry[]): Feature[] {

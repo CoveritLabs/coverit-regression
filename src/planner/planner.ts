@@ -8,11 +8,17 @@ import { PATH_SEPARATOR } from "@constants/common";
 import { PATHS } from "@constants/paths";
 import FileHandler from "@utils/files";
 import Matcher from "@utils/matcher";
+import { GenerationRecord } from "@/types/generationRecord";
+import DiffDetector from "./diffDetector";
+import GenerationRecordStore from "./generationRecordStore";
 
 class Planner {
   private templates: FileEntry[] = [];
   private features: FileEntry[] = [];
   private manifest: Manifest | null = null;
+  private outputPath: string = PATHS.OUTPUT;
+  private readonly diffDetector = new DiffDetector();
+  private readonly generationRecordStore = new GenerationRecordStore();
 
   constructor() {}
 
@@ -31,33 +37,45 @@ class Planner {
     return this;
   }
 
+  setOutputPath(outputPath: string): Planner {
+    this.outputPath = outputPath;
+    return this;
+  }
+
   plan(): FileOperation[] {
     const operations: FileOperation[] = [];
-    operations.push(...this.createOperations(this.templates));
+    const generationRecord = this.generationRecordStore.load(this.outputPath);
+    operations.push(...this.createOperations(this.templates, generationRecord, FileOwnershipMode.Static, this.outputPath));
     operations.push(
-      ...this.createOperations(this.features, FileOwnershipMode.INPUT, FileHandler.join(PATHS.OUTPUT, "features")),
+      ...this.createOperations(
+        this.features,
+        generationRecord,
+        FileOwnershipMode.INPUT,
+        FileHandler.join(this.outputPath, "features"),
+      ),
     );
     return operations;
   }
 
   private createOperations(
     files: FileEntry[],
+    generationRecord: GenerationRecord,
     defaultMode: FileOwnershipMode = FileOwnershipMode.Static,
-    rootPath: string = PATHS.OUTPUT,
+    rootPath: string = this.outputPath,
   ): FileOperation[] {
     const operations: FileOperation[] = [];
     for (const file of files) {
       const rule = this.findMatchingRule(file.relativePath);
       const mode = rule ? rule.mode : defaultMode;
       const targetPath = this.getTargetPath(file.relativePath, rootPath);
-      const operation = this.createOperation(file.absolutePath, targetPath, file.relativePath, mode);
+      const operation = this.createOperation(file.absolutePath, targetPath, file.relativePath, mode, generationRecord);
       operations.push(operation);
     }
 
     return operations;
   }
 
-  private getTargetPath(relativePath: string, rootPath: string = PATHS.OUTPUT): string {
+  private getTargetPath(relativePath: string, rootPath: string = this.outputPath): string {
     return FileHandler.join(rootPath, ...relativePath.split(PATH_SEPARATOR));
   }
 
@@ -70,13 +88,19 @@ class Planner {
     targetPath: string,
     relativePath: string,
     mode: FileOwnershipMode,
+    generationRecord: GenerationRecord,
   ): FileOperation {
+    if (mode === FileOwnershipMode.Dynamic) {
+      return this.diffDetector.detect(relativePath, sourcePath, targetPath, mode, generationRecord);
+    }
+
     const targetExists = FileHandler.exists(targetPath);
 
     if (!targetExists) {
       return {
         kind: FileOperationKind.Create,
         mode,
+        relativePath,
         sourcePath,
         targetPath,
         reason: "Target file does not exist.",
@@ -87,6 +111,7 @@ class Planner {
       return {
         kind: FileOperationKind.Preserve,
         mode,
+        relativePath,
         sourcePath,
         targetPath,
         reason: "User extension file already exists and is preserved.",
@@ -99,8 +124,10 @@ class Planner {
       return {
         kind: FileOperationKind.Unchanged,
         mode,
+        relativePath,
         sourcePath,
         targetPath,
+        generatedContent: source,
         reason: "Target file already exists and is unchanged.",
       };
     }
@@ -108,8 +135,10 @@ class Planner {
     return {
       kind: FileOperationKind.Update,
       mode,
+      relativePath,
       sourcePath,
       targetPath,
+      generatedContent: source,
       reason: "Target file exists and will be updated.",
     };
   }

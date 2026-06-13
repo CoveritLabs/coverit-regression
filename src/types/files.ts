@@ -25,7 +25,10 @@ export interface FileEntry {
 export interface FileOperation {
   kind: FileOperationKind;
   mode: FileOwnershipMode;
+  relativePath?: string;
   sourcePath: string;
   targetPath: string;
+  content?: string;
+  generatedContent?: string;
   reason: string;
 }
