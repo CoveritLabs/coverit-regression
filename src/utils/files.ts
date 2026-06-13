@@ -36,6 +36,10 @@ class FileHandler {
     return this.exists(absolutePath) && fs.statSync(absolutePath).isFile();
   }
 
+  static ensureDirectory(absolutePath: string): void {
+    fs.mkdirSync(absolutePath, { recursive: true });
+  }
+
   static filterByExtension(fileEntries: FileEntry[], extension: string): FileEntry[] {
     return fileEntries.filter((entry) => entry.absolutePath.endsWith(extension));
   }
@@ -47,6 +51,16 @@ class FileHandler {
   static readFile(absolutePath: string): string {
     if (!this.isFile(absolutePath)) return "";
     return fs.readFileSync(absolutePath, "utf-8");
+  }
+
+  static writeFile(absolutePath: string, content: string): void {
+    this.ensureDirectory(path.dirname(absolutePath));
+    fs.writeFileSync(absolutePath, content, "utf-8");
+  }
+
+  static copyFile(sourcePath: string, targetPath: string): void {
+    this.ensureDirectory(path.dirname(targetPath));
+    fs.copyFileSync(sourcePath, targetPath);
   }
 
   private static walkDirectory(root: string, current: string, fileEntries: FileEntry[] = []): void {

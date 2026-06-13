@@ -17,6 +17,7 @@ dist
 dist-ssr
 *.local
 output/*
+.generated/*
 
 # Editor directories and files
 .vscode/*

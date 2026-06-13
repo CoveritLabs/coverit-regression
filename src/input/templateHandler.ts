@@ -11,9 +11,9 @@ class TemplateHandler {
   templates: FileEntry[] = [];
 
   scan(): FileEntry[] {
-    logger.info(`[Template Handler] Scanning for .template files in ${PATHS.TEMPLATES}...`);
+    logger.info(`[Template Handler] Scanning template files in ${PATHS.TEMPLATES}...`);
     this.templates = FileHandler.scanDirectory(PATHS.TEMPLATES);
-    logger.info(`[Template Handler] Found ${this.templates.length} .template file(s).`);
+    logger.info(`[Template Handler] Found ${this.templates.length} template file(s).`);
     return this.templates;
   }
 }
