@@ -10,24 +10,29 @@ const logFormat = printf(({ level, message, timestamp }) => {
   return `[${timestamp}] ${level}: ${message}`;
 });
 
+const currentLogLevel = process.env.LOG_LEVEL || "info";
+
 export const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || "info",
+  level: currentLogLevel,
   format: combine(timestamp({ format: "YYYY-MM-DD HH:mm:ss" }), logFormat),
   transports: [
     new winston.transports.Console({
-      format: combine(colorize({ all: true }), timestamp({ format: "YYYY-MM-DD HH:mm:ss" }), logFormat),
+      level: currentLogLevel,
+      format: combine(colorize({ all: true })),
     }),
   ],
 });
 
 export function setupLogger(options: { logToFile?: boolean; logPath?: string }) {
+  logger.info(`Current log level: ${currentLogLevel}`);
+
   if (options.logToFile) {
     const filename = options.logPath || "combined.log";
 
     logger.add(
       new winston.transports.File({
         filename,
-        format: combine(timestamp({ format: "YYYY-MM-DD HH:mm:ss" }), logFormat),
+        level: currentLogLevel,
       }),
     );
 
