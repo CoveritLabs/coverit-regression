@@ -3,18 +3,17 @@
     "baseUrl": "http://localhost:3000"
   },
   "run": {
-    "projectId": "",
-    "artifactRoot": "artifacts/"
+    "applicationId": "",
+    "versionId": ""
   },
   "api": {
     "enabled": false,
     "baseUrl": "http://localhost:8080",
-    "apiKeyEnv": "COVERIT_API_KEY",
-    "eventPath": "/api/v1/regression/runs/{runId}/events",
-    "completionPath": "/api/v1/regression/runs/{runId}/complete"
+    "apiKey": ""
   },
   "reporting": {
-    "localArtifactsEnabled": true
+    "localArtifactsEnabled": true,
+    "artifactRoot": "artifacts/"
   },
   "healing": {
     "enabled": true,

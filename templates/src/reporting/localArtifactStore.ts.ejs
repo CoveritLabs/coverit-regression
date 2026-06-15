@@ -7,7 +7,7 @@ export class LocalArtifactStore {
   private readonly root: string;
 
   constructor(config: CoveritConfig, runId: string) {
-    this.root = path.join(config.run.artifactRoot, runId);
+    this.root = path.join(config.reporting.artifactRoot, runId);
   }
 
   appendLog(message: string): void {

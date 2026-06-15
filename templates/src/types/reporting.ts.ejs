@@ -5,9 +5,22 @@ export type StepStatus = "running" | "passed" | "failed";
 
 export interface RunIdentity {
   runId: string;
-  projectId?: string;
+  applicationId: string;
+  versionId?: string;
   featureName?: string;
   scenarioName?: string;
+}
+
+export interface RegressionEvent {
+  id: string;
+  type: string;
+  timestamp: string;
+  runId: string;
+  applicationId: string;
+  versionId?: string;
+  featureName?: string;
+  scenarioName?: string;
+  payload: unknown;
 }
 
 export interface StepReport {
@@ -26,4 +39,3 @@ export interface RunSummary {
   totals: { passed: number; failed: number; warnings: number };
   reports: StepReport[];
 }
-

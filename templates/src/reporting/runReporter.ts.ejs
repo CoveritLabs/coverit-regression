@@ -1,51 +1,80 @@
 import { getCoveritRunId, loadCoveritConfig } from "@/config/coveritConfig";
+import { CoveritApiClient } from "@/reporting/coveritApiClient";
 import { LocalArtifactStore } from "@/reporting/localArtifactStore";
-import { AssertionResult, RunIdentity, RunSummary, ScenarioStatus, StepReport, StepStatus } from "@/types";
+import { AssertionResult, RegressionEvent, RunIdentity, RunSummary, ScenarioStatus, StepReport, StepStatus } from "@/types";
 
 export class RunReporter {
+  private readonly apiClient?: CoveritApiClient;
   private readonly artifactStore?: LocalArtifactStore;
   private readonly identity: RunIdentity;
 
   constructor(identity: Partial<RunIdentity> = {}, config = loadCoveritConfig()) {
-    const runId = identity.runId ?? getCoveritRunId(config);
+    const runId = identity.runId ?? getCoveritRunId();
+    this.apiClient = config.api.enabled ? new CoveritApiClient(config) : undefined;
     this.artifactStore = config.reporting.localArtifactsEnabled ? new LocalArtifactStore(config, runId) : undefined;
-    this.identity = { runId, projectId: config.run.projectId, ...identity };
+    this.identity = {
+      runId,
+      applicationId: config.run.applicationId,
+      ...(config.run.versionId ? { versionId: config.run.versionId } : {}),
+      ...identity,
+    };
   }
 
   async scenarioStatus(status: ScenarioStatus): Promise<void> {
-    this.event("scenario.status", { status });
+    await this.event("scenario.status", { status });
   }
 
   async stepStatus(report: Pick<StepReport, "id" | "label" | "stepType">, status: StepStatus): Promise<void> {
-    this.event("step.status", { status, stepId: report.id, stepLabel: report.label, stepType: report.stepType });
+    await this.event("step.status", { status, stepId: report.id, stepLabel: report.label, stepType: report.stepType });
   }
 
   async assertionResult(report: Pick<StepReport, "id" | "label" | "stepType">, result: AssertionResult): Promise<void> {
-    this.event("assertion.result", { stepId: report.id, stepLabel: report.label, stepType: report.stepType, result });
-    if (!result.passed && result.severity === "blocking") this.failure({ report, result });
+    await this.event("assertion.result", { stepId: report.id, stepLabel: report.label, stepType: report.stepType, result });
+    if (!result.passed && result.severity === "blocking") await this.failure({ report, result });
   }
 
   async log(message: string, level: "info" | "warning" | "error" = "info"): Promise<void> {
     this.artifactStore?.appendLog(`[${level.toUpperCase()}] ${message}`);
-    this.event("log", { level, message });
+    await this.event("log", { level, message });
   }
 
   async failure(failure: unknown): Promise<void> {
     this.artifactStore?.saveFailure(failure);
-    this.event("failure", failure);
+    await this.event("failure", failure);
   }
 
   async saveSummary(summary: RunSummary): Promise<void> {
     this.artifactStore?.saveSummary(summary);
+    await this.sendCompletion(summary);
   }
 
-  private event(type: string, payload: unknown): void {
-    this.artifactStore?.appendEvent({
+  private async event(type: string, payload: unknown): Promise<void> {
+    const event: RegressionEvent = {
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       type,
       timestamp: new Date().toISOString(),
       ...this.identity,
       payload,
-    });
+    };
+    this.artifactStore?.appendEvent(event);
+    await this.sendEvent(event);
+  }
+
+  private async sendEvent(event: RegressionEvent): Promise<void> {
+    if (!this.apiClient) return;
+    try {
+      await this.apiClient.sendEvent(event);
+    } catch (error) {
+      console.warn(`[CoverIt] Failed to send regression event "${event.type}" to API: ${(error as Error).message}`);
+    }
+  }
+
+  private async sendCompletion(summary: RunSummary): Promise<void> {
+    if (!this.apiClient) return;
+    try {
+      await this.apiClient.completeRun(this.identity, summary);
+    } catch (error) {
+      console.warn(`[CoverIt] Failed to send regression run completion to API: ${(error as Error).message}`);
+    }
   }
 }

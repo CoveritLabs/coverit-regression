@@ -1,0 +1,37 @@
+import { CoveritConfig, RegressionEvent, RunSummary } from "@/types";
+
+export class CoveritApiClient {
+  private readonly baseUrl: string;
+
+  constructor(private readonly config: CoveritConfig) {
+    this.baseUrl = config.api.baseUrl.replace(/\/+$/, "");
+  }
+
+  async sendEvent(event: RegressionEvent): Promise<void> {
+    await this.post(`/api/v1/regression/runs/${encodeURIComponent(event.runId)}/events`, event);
+  }
+
+  async completeRun(identity: Pick<RegressionEvent, "runId" | "applicationId" | "versionId">, summary: RunSummary): Promise<void> {
+    await this.post(`/api/v1/regression/runs/${encodeURIComponent(identity.runId)}/complete`, {
+      applicationId: identity.applicationId,
+      ...(identity.versionId ? { versionId: identity.versionId } : {}),
+      summary,
+    });
+  }
+
+  private async post(path: string, body: unknown): Promise<void> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CoverIt-Api-Key": this.config.api.apiKey,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const message = await response.text().catch(() => "");
+      throw new Error(`CoverIt API request failed with ${response.status}${message ? `: ${message}` : ""}`);
+    }
+  }
+}

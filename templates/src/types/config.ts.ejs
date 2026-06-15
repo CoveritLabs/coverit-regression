@@ -1,7 +1,7 @@
 export interface CoveritConfig {
   application: { baseUrl: string };
-  run: { id?: string; idEnv?: string; projectId?: string; artifactRoot: string };
-  api: { enabled: boolean; baseUrl: string; apiKey?: string; apiKeyEnv?: string; eventPath: string; completionPath: string };
-  reporting: { localArtifactsEnabled: boolean };
+  run: { applicationId: string; versionId?: string };
+  api: { enabled: boolean; baseUrl: string; apiKey: string };
+  reporting: { localArtifactsEnabled: boolean; artifactRoot: string };
   healing: { enabled: boolean; threshold: number; artifactPath: string };
 }

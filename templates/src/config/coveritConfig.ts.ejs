@@ -16,21 +16,28 @@ export function loadCoveritConfig(configPath = "coverit.config.json"): CoveritCo
   }
 }
 
-export function getCoveritRunId(config = loadCoveritConfig()): string {
-  const envRunId = config.run.idEnv ? process.env[config.run.idEnv] : undefined;
-  if (envRunId) return envRunId;
-  if (config.run.id) return config.run.id;
+export function getCoveritRunId(): string {
+  const existing = process.env.COVERIT_RUN_ID;
+  if (existing) return existing;
   const generated = `local-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-  process.env[config.run.idEnv ?? "COVERIT_RUN_ID"] = generated;
+  process.env.COVERIT_RUN_ID = generated;
   return generated;
 }
 
 function resolveConfig(config: CoveritConfig): CoveritConfig {
   if (!config.application?.baseUrl) throw new Error("coverit.config.json must define application.baseUrl.");
-  if (!config.run?.artifactRoot) throw new Error("coverit.config.json must define run.artifactRoot.");
+  if (!config.run?.applicationId) throw new Error("coverit.config.json must define run.applicationId.");
   if (!config.api) throw new Error("coverit.config.json must define api settings.");
   if (!config.reporting) throw new Error("coverit.config.json must define reporting settings.");
+  if (!config.reporting.artifactRoot) throw new Error("coverit.config.json must define reporting.artifactRoot.");
   if (!config.healing) throw new Error("coverit.config.json must define healing settings.");
-  const apiKey = config.api.apiKeyEnv ? process.env[config.api.apiKeyEnv] : undefined;
-  return { ...config, api: { ...config.api, apiKey: config.api.apiKey ?? apiKey } };
+  if (config.api.enabled) {
+    if (!config.api.baseUrl) throw new Error("coverit.config.json must define api.baseUrl when api.enabled is true.");
+    if (!config.api.apiKey) throw new Error("coverit.config.json must define api.apiKey when api.enabled is true.");
+  }
+  return {
+    ...config,
+    run: { ...config.run, versionId: config.run.versionId || undefined },
+    api: { ...config.api, baseUrl: config.api.baseUrl.replace(/\/+$/, "") },
+  };
 }
