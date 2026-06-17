@@ -1,0 +1,51 @@
+import path from "path";
+
+import { CoveritConfig } from "@/types";
+
+type ArtifactPaths = {
+  artifactRoot: string;
+  runRoot: string;
+  runLog: string;
+  events: string;
+  summary: string;
+  failures: string;
+  healing: string;
+  playwrightRoot: string;
+  playwrightResults: string;
+  playwrightReport: string;
+};
+
+export function getArtifactPaths(config: Pick<CoveritConfig, "reporting">, runId: string): ArtifactPaths {
+  const artifactRoot = path.resolve(config.reporting.artifactRoot || "artifacts");
+  const runRoot = path.join(artifactRoot, runId);
+  const playwrightRoot = path.join(runRoot, "playwright");
+  return {
+    artifactRoot,
+    runRoot,
+    runLog: path.join(runRoot, "run.log"),
+    events: path.join(runRoot, "events.ndjson"),
+    summary: path.join(runRoot, "summary.json"),
+    failures: path.join(runRoot, "failures.md"),
+    healing: path.join(runRoot, "healing.md"),
+    playwrightRoot,
+    playwrightResults: path.join(playwrightRoot, "output"),
+    playwrightReport: path.join(playwrightRoot, "report"),
+  };
+}
+
+export function getPlaywrightScenarioDir(paths: ArtifactPaths, scenarioIndex?: number): string {
+  return path.join(paths.playwrightRoot, `scenario_${Math.max(1, scenarioIndex ?? 1)}`);
+}
+
+export function toRelativeArtifactPath(paths: ArtifactPaths, absolutePath: string): string {
+  return path.relative(paths.runRoot, absolutePath).replace(/\\/g, "/");
+}
+
+export function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "artifact";
+}

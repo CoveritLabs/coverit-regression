@@ -2,39 +2,156 @@ import fs from "fs";
 import path from "path";
 
 import { CoveritConfig } from "@/types";
+import { RegressionArtifactFile, RegressionArtifactKind } from "@/types";
+import { getArtifactPaths, getPlaywrightScenarioDir, toRelativeArtifactPath } from "@/utils/artifactPaths";
 
 export class LocalArtifactStore {
-  private readonly root: string;
+  private readonly paths: ReturnType<typeof getArtifactPaths>;
 
   constructor(config: CoveritConfig, runId: string) {
-    this.root = path.join(config.reporting.artifactRoot, runId);
-  }
-
-  appendLog(message: string): void {
-    this.append("events/log.txt", `${new Date().toISOString()} ${message}\n`);
+    this.paths = getArtifactPaths(config, runId);
   }
 
   appendEvent(event: unknown): void {
-    this.append("events/events.jsonl", `${JSON.stringify(event)}\n`);
+    this.append(this.paths.events, `${JSON.stringify(event)}\n`);
   }
 
   saveFailure(failure: unknown): void {
-    this.write(`failures/${Date.now()}-failure.json`, JSON.stringify(failure, null, 2));
+    this.append(this.paths.failures, `## ${new Date().toISOString()}\n\n\`\`\`json\n${JSON.stringify(failure, null, 2)}\n\`\`\`\n\n`);
   }
 
   saveSummary(summary: unknown): void {
-    this.write("results/runner-summary.json", JSON.stringify(summary, null, 2));
+    this.write(this.paths.summary, JSON.stringify(summary, null, 2));
   }
 
-  private append(relativePath: string, content: string): void {
-    const filePath = path.join(this.root, relativePath);
+  saveScenarioInfo(input: { featureName?: string; scenarioName?: string; scenarioIndex?: number; status: string; startedAt?: string; finishedAt?: string }): void {
+    if (!input.scenarioIndex) return;
+    const scenarioKey = [input.featureName ?? "", input.scenarioName ?? ""].join("::");
+    const scenarioDir = getPlaywrightScenarioDir(this.paths, input.scenarioIndex);
+    const scenarioPath = path.join(scenarioDir, "scenario.json");
+    const previous = this.readJsonObject(scenarioPath);
+    this.write(scenarioPath, JSON.stringify({
+      ...previous,
+      featureName: input.featureName,
+      scenarioName: input.scenarioName,
+      scenarioKey,
+      scenarioIndex: input.scenarioIndex,
+      status: input.status,
+      startedAt: input.startedAt ?? previous.startedAt,
+      finishedAt: input.finishedAt ?? previous.finishedAt,
+    }, null, 2));
+  }
+
+  async savePlaywrightFailureArtifacts(input: { featureName?: string; scenarioName?: string; scenarioIndex?: number; error: Error; screenshot?: () => Promise<Buffer> }): Promise<void> {
+    const scenarioDir = getPlaywrightScenarioDir(this.paths, input.scenarioIndex);
+    this.write(path.join(scenarioDir, "error.md"), `# ${input.scenarioName ?? "Scenario failure"}\n\n- Feature: ${input.featureName ?? "n/a"}\n- Time: ${new Date().toISOString()}\n\n## Error\n\n\`\`\`text\n${input.error.stack ?? input.error.message}\n\`\`\`\n`);
+    if (!input.screenshot) return;
+    try {
+      const screenshot = await input.screenshot();
+      this.writeBuffer(path.join(scenarioDir, "screenshot.png"), screenshot);
+    } catch {
+      // Failure artifact capture should never mask the original test failure.
+    }
+  }
+
+  listArtifacts(scope: "all" | "run" | "scenario" = "all", scenarioIndex?: number): RegressionArtifactFile[] {
+    if (!fs.existsSync(this.paths.runRoot)) return [];
+    return this.walk(this.paths.runRoot)
+      .filter((absolutePath) => this.isInScope(absolutePath, scope, scenarioIndex))
+      .filter((absolutePath) => isUploadCandidate(toRelativeArtifactPath(this.paths, absolutePath)))
+      .map((absolutePath) => {
+      const relativePath = toRelativeArtifactPath(this.paths, absolutePath);
+      return {
+        absolutePath,
+        relativePath,
+        name: path.basename(absolutePath),
+        kind: inferArtifactKind(relativePath),
+        contentType: inferContentType(relativePath),
+      };
+    });
+  }
+
+  private isInScope(absolutePath: string, scope: "all" | "run" | "scenario", scenarioIndex?: number): boolean {
+    if (scope === "all") return true;
+    const relativePath = toRelativeArtifactPath(this.paths, absolutePath);
+    const scenarioPrefix = scenarioIndex ? `playwright/scenario_${scenarioIndex}/` : "";
+    if (scope === "scenario") return Boolean(scenarioPrefix && relativePath.startsWith(scenarioPrefix));
+    if (scenarioPrefix && relativePath.startsWith(scenarioPrefix)) return false;
+    return !/^playwright\/scenario_\d+\//.test(relativePath);
+  }
+
+  private append(filePath: string, content: string): void {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.appendFileSync(filePath, content, "utf8");
   }
 
-  private write(relativePath: string, content: string): void {
-    const filePath = path.join(this.root, relativePath);
+  private write(filePath: string, content: string): void {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, content, "utf8");
   }
+
+  private writeBuffer(filePath: string, content: Buffer): void {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, content);
+  }
+
+  private readJsonObject(filePath: string): Record<string, unknown> {
+    if (!fs.existsSync(filePath)) return {};
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private walk(directory: string): string[] {
+    return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+      const childPath = path.join(directory, entry.name);
+      return entry.isDirectory() ? this.walk(childPath) : [childPath];
+    });
+  }
+}
+
+function isUploadCandidate(relativePath: string): boolean {
+  const normalized = relativePath.replace(/\\/g, "/").toLowerCase();
+  if (normalized.includes("/.playwright-artifacts-")) return false;
+  if (normalized.startsWith("playwright/report/trace/")) return false;
+  if (normalized.startsWith("playwright/report/data/")) return false;
+  if (normalized === "playwright/report/index.html") return true;
+  if (normalized === "playwright/output/.last-run.json") return true;
+  if (normalized.startsWith("playwright/output/")) {
+    return /(^|\/)(trace\.zip|error-context\.md|video\.webm|screenshot\.png)$/.test(normalized)
+      || /\.(png|jpe?g|webp|webm|mp4|mov|zip|md)$/.test(normalized);
+  }
+  return true;
+}
+
+function inferArtifactKind(relativePath: string): RegressionArtifactKind {
+  const normalized = relativePath.toLowerCase();
+  if (normalized === "run.log") return "log";
+  if (normalized === "events.ndjson") return "events";
+  if (normalized === "failures.md" || normalized.endsWith("/error.md")) return "failure";
+  if (normalized === "summary.json") return "summary";
+  if (/\.(png|jpe?g|webp)$/.test(normalized)) return "screenshot";
+  if (/\.(webm|mp4|mov)$/.test(normalized)) return "video";
+  if (normalized.includes("trace") || /\.(trace|zip)$/.test(normalized)) return "trace";
+  if (normalized.includes("healing")) return "healing";
+  return "other";
+}
+
+function inferContentType(relativePath: string): string {
+  const normalized = relativePath.toLowerCase();
+  if (normalized.endsWith(".json")) return "application/json";
+  if (normalized.endsWith(".ndjson") || normalized.endsWith(".jsonl")) return "application/x-ndjson";
+  if (normalized.endsWith(".txt")) return "text/plain";
+  if (normalized.endsWith(".md")) return "text/markdown";
+  if (normalized.endsWith(".png")) return "image/png";
+  if (normalized.endsWith(".jpg") || normalized.endsWith(".jpeg")) return "image/jpeg";
+  if (normalized.endsWith(".webp")) return "image/webp";
+  if (normalized.endsWith(".webm")) return "video/webm";
+  if (normalized.endsWith(".mp4")) return "video/mp4";
+  if (normalized.endsWith(".mov")) return "video/quicktime";
+  if (normalized.endsWith(".zip")) return "application/zip";
+  return "application/octet-stream";
 }

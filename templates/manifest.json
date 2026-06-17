@@ -59,6 +59,11 @@
       "description": "Generated framework reporting support."
     },
     {
+      "path": "src/utils/**",
+      "mode": "static",
+      "description": "Generated framework utility helpers."
+    },
+    {
       "path": "tests/**",
       "mode": "static",
       "description": "Generated Playwright regression specs."

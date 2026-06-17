@@ -13,11 +13,11 @@
   },
   "reporting": {
     "localArtifactsEnabled": true,
-    "artifactRoot": "artifacts/"
+    "artifactRoot": "artifacts"
   },
   "healing": {
     "enabled": true,
     "threshold": 0.55,
-    "artifactPath": "artifacts/self-healing/healing-events.jsonl"
+    "artifactPath": ""
   }
 }

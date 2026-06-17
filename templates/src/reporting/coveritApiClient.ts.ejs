@@ -1,37 +1,86 @@
-import { CoveritConfig, RegressionEvent, RunSummary } from "@/types";
+import fs from "fs";
+
+import { CoveritConfig, RegressionArtifactFile, RegressionEvent, RunSummary } from "@/types";
 
 export class CoveritApiClient {
   private readonly baseUrl: string;
+  private readonly requestTimeoutMs = 5_000;
+  private readonly artifactUploadTimeoutMs = 60_000;
 
   constructor(private readonly config: CoveritConfig) {
     this.baseUrl = config.api.baseUrl.replace(/\/+$/, "");
   }
 
   async sendEvent(event: RegressionEvent): Promise<void> {
-    await this.post(`/api/v1/regression/runs/${encodeURIComponent(event.runId)}/events`, event);
+    await this.post("send event", `/api/v1/regression/runs/${encodeURIComponent(event.runId)}/events`, event);
   }
 
   async completeRun(identity: Pick<RegressionEvent, "runId" | "applicationId" | "versionId">, summary: RunSummary): Promise<void> {
-    await this.post(`/api/v1/regression/runs/${encodeURIComponent(identity.runId)}/complete`, {
+    await this.post("complete run", `/api/v1/regression/runs/${encodeURIComponent(identity.runId)}/complete`, {
       applicationId: identity.applicationId,
       ...(identity.versionId ? { versionId: identity.versionId } : {}),
       summary,
     });
   }
 
-  private async post(path: string, body: unknown): Promise<void> {
+  async uploadArtifact(identity: Pick<RegressionEvent, "runId" | "applicationId" | "versionId" | "featureName" | "scenarioName">, artifact: RegressionArtifactFile): Promise<void> {
+    const form = new FormData();
+    form.append("applicationId", identity.applicationId);
+    if (identity.versionId) form.append("versionId", identity.versionId);
+    if (identity.featureName || identity.scenarioName) {
+      form.append("scenarioKey", [identity.featureName ?? "", identity.scenarioName ?? ""].join("::"));
+    }
+    if (identity.featureName) form.append("featureName", identity.featureName);
+    if (identity.scenarioName) form.append("scenarioName", identity.scenarioName);
+    form.append("kind", artifact.kind);
+    form.append("name", artifact.name);
+    form.append("relativePath", artifact.relativePath);
+    form.append("contentType", artifact.contentType);
+    form.append("metadata", JSON.stringify({ relativePath: artifact.relativePath }));
+    form.append("file", new Blob([new Uint8Array(fs.readFileSync(artifact.absolutePath))], { type: artifact.contentType }), artifact.name);
+
+    await this.postForm(`/api/v1/regression/runs/${encodeURIComponent(identity.runId)}/artifacts`, form);
+  }
+
+  private async post(operation: string, path: string, body: unknown): Promise<void> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: "POST",
+      signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         "X-CoverIt-Api-Key": this.config.api.apiKey,
       },
       body: JSON.stringify(body),
-    });
+    }).finally(() => clearTimeout(timeout));
 
     if (!response.ok) {
       const message = await response.text().catch(() => "");
-      throw new Error(`CoverIt API request failed with ${response.status}${message ? `: ${message}` : ""}`);
+      throw new Error(formatApiError(operation, response.status, message));
     }
   }
+
+  private async postForm(path: string, body: FormData): Promise<void> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.artifactUploadTimeoutMs);
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "X-CoverIt-Api-Key": this.config.api.apiKey,
+      },
+      body,
+    }).finally(() => clearTimeout(timeout));
+
+    if (!response.ok) {
+      const message = await response.text().catch(() => "");
+      throw new Error(formatApiError("upload artifact", response.status, message));
+    }
+  }
+}
+
+function formatApiError(operation: string, status: number, body: string): string {
+  const preview = body.trim().replace(/\s+/g, " ").slice(0, 240);
+  return `${operation} failed with HTTP ${status}${preview ? `: ${preview}` : ""}`;
 }

@@ -2,16 +2,28 @@ import { getCoveritRunId, loadCoveritConfig } from "@/config/coveritConfig";
 import { CoveritApiClient } from "@/reporting/coveritApiClient";
 import { LocalArtifactStore } from "@/reporting/localArtifactStore";
 import { AssertionResult, RegressionEvent, RunIdentity, RunSummary, ScenarioStatus, StepReport, StepStatus } from "@/types";
+import { getArtifactPaths } from "@/utils/artifactPaths";
+import { logger, Logger } from "@/utils/logger";
+import type { Page } from "@playwright/test";
 
 export class RunReporter {
+  private static readonly warnedApiDisabledReasons = new Set<string>();
+  private static readonly uploadedArtifactPaths = new Set<string>();
   private readonly apiClient?: CoveritApiClient;
   private readonly artifactStore?: LocalArtifactStore;
   private readonly identity: RunIdentity;
+  private readonly logger: Logger;
 
   constructor(identity: Partial<RunIdentity> = {}, config = loadCoveritConfig()) {
     const runId = identity.runId ?? getCoveritRunId();
+    logger.configure({ logFilePath: getArtifactPaths(config, runId).runLog });
+    this.logger = logger.forScenario();
     this.apiClient = config.api.enabled ? new CoveritApiClient(config) : undefined;
     this.artifactStore = config.reporting.localArtifactsEnabled ? new LocalArtifactStore(config, runId) : undefined;
+    if (config.reporting.apiDisabledReason && !RunReporter.warnedApiDisabledReasons.has(config.reporting.apiDisabledReason)) {
+      RunReporter.warnedApiDisabledReasons.add(config.reporting.apiDisabledReason);
+      logger.warn("CoverIt API", config.reporting.apiDisabledReason);
+    }
     this.identity = {
       runId,
       applicationId: config.run.applicationId,
@@ -21,6 +33,13 @@ export class RunReporter {
   }
 
   async scenarioStatus(status: ScenarioStatus): Promise<void> {
+    this.artifactStore?.saveScenarioInfo({
+      featureName: this.identity.featureName,
+      scenarioName: this.identity.scenarioName,
+      scenarioIndex: this.identity.scenarioIndex,
+      status,
+      ...(status === "running" ? { startedAt: new Date().toISOString() } : { finishedAt: new Date().toISOString() }),
+    });
     await this.event("scenario.status", { status });
   }
 
@@ -34,7 +53,6 @@ export class RunReporter {
   }
 
   async log(message: string, level: "info" | "warning" | "error" = "info"): Promise<void> {
-    this.artifactStore?.appendLog(`[${level.toUpperCase()}] ${message}`);
     await this.event("log", { level, message });
   }
 
@@ -46,6 +64,46 @@ export class RunReporter {
   async saveSummary(summary: RunSummary): Promise<void> {
     this.artifactStore?.saveSummary(summary);
     await this.sendCompletion(summary);
+  }
+
+  async captureFailureArtifacts(page: Page, error: unknown): Promise<void> {
+    if (!this.artifactStore) return;
+    await this.artifactStore.savePlaywrightFailureArtifacts({
+      featureName: this.identity.featureName,
+      scenarioName: this.identity.scenarioName,
+      scenarioIndex: this.identity.scenarioIndex,
+      error: error instanceof Error ? error : new Error(String(error)),
+      screenshot: () => page.screenshot({ fullPage: true }),
+    });
+  }
+
+  async uploadArtifacts(scope: "all" | "run" | "scenario" = "all", options: { maxDurationMs?: number } = {}): Promise<void> {
+    if (!this.apiClient || !this.artifactStore) return;
+    const artifacts = this.artifactStore.listArtifacts(scope, this.identity.scenarioIndex);
+    if (artifacts.length === 0) return;
+
+    const startedAt = Date.now();
+    const maxDurationMs = options.maxDurationMs ?? 25_000;
+    let uploaded = 0;
+    let failed = 0;
+    let skipped = 0;
+    for (const artifact of artifacts) {
+      const uploadKey = `${this.identity.runId}:${artifact.relativePath}`;
+      if (RunReporter.uploadedArtifactPaths.has(uploadKey)) continue;
+      if (Date.now() - startedAt > maxDurationMs) {
+        skipped += 1;
+        continue;
+      }
+      try {
+        await this.apiClient.uploadArtifact(this.identity, artifact);
+        RunReporter.uploadedArtifactPaths.add(uploadKey);
+        uploaded += 1;
+      } catch (error) {
+        failed += 1;
+        this.logger.warn("Artifacts", `Could not upload "${artifact.relativePath}". ${(error as Error).message}`);
+      }
+    }
+    if (uploaded > 0 || failed > 0 || skipped > 0) this.logger.info("Artifacts", `Discovered ${artifacts.length} artifact(s); uploaded ${uploaded}; failed ${failed}; skipped ${skipped}.`);
   }
 
   private async event(type: string, payload: unknown): Promise<void> {
@@ -65,7 +123,7 @@ export class RunReporter {
     try {
       await this.apiClient.sendEvent(event);
     } catch (error) {
-      console.warn(`[CoverIt] Failed to send regression event "${event.type}" to API: ${(error as Error).message}`);
+      this.logger.warn("CoverIt API", `Could not send regression event "${event.type}". ${(error as Error).message}`);
     }
   }
 
@@ -74,7 +132,7 @@ export class RunReporter {
     try {
       await this.apiClient.completeRun(this.identity, summary);
     } catch (error) {
-      console.warn(`[CoverIt] Failed to send regression run completion to API: ${(error as Error).message}`);
+      this.logger.warn("CoverIt API", `Could not send run completion. ${(error as Error).message}`);
     }
   }
 }

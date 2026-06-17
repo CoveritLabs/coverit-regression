@@ -10,12 +10,14 @@ import { Registry } from "@/registry/registry";
 import { RunReporter } from "@/reporting/runReporter";
 import { ActionHookInfo, AssertionInfo, AssertionResult, HealingInfo, RegressionRunnerOptions, RunSummary, RuntimeScenarioPlan, RuntimeStepPlan, StepReport } from "@/types";
 import { extensionHooks } from "@/extensions";
+import { logger, Logger } from "@/utils/logger";
 
 export class RegressionRunner {
   private readonly runOrigin?: string;
   private readonly featureName?: string;
   private readonly scenarioName?: string;
   private readonly reporter: RunReporter;
+  private readonly logger: Logger;
   private readonly healingEngine = new HealingEngine();
   private startedAt = new Date().toISOString();
   private designRuntime = new DesignClassRuntime(DESIGN_CLASS_INFO);
@@ -25,6 +27,7 @@ export class RegressionRunner {
     this.featureName = options.featureName;
     this.scenarioName = options.scenarioName;
     this.reporter = options.reporter ?? new RunReporter();
+    this.logger = logger.forScenario(this.featureName, this.scenarioName);
     this.designRuntime.injectHealingEngine(this.healingEngine);
   }
 
@@ -36,6 +39,7 @@ export class RegressionRunner {
       throw new Error(`Unknown design class "${scenario.designClassId}". Expected "${DESIGN_CLASS_INFO.id}".`);
     }
 
+    this.logger.info("Scenario", `Feature: ${this.featureName ?? "n/a"} | Scenario: ${scenario.name}`);
     await this.reporter.scenarioStatus("running");
     await this.log(`SCENARIO START: ${scenario.name}`);
     try {
@@ -49,14 +53,15 @@ export class RegressionRunner {
         this.throwOnBlockingFailure(report);
       }
 
-      await this.reporter.saveSummary(this.buildSummary("passed", reports));
       await this.reporter.scenarioStatus("passed");
+      await this.reporter.saveSummary(this.buildSummary("passed", reports));
       await this.logSummary("passed", reports);
     } catch (error) {
       await this.log(`SCENARIO FAILED: ${scenario.name} -> ${(error as Error).message}`, "error");
+      await this.reporter.captureFailureArtifacts(this.page, error);
       await this.reporter.failure({ message: (error as Error).message, stack: (error as Error).stack });
-      await this.reporter.saveSummary(this.buildSummary("failed", reports));
       await this.reporter.scenarioStatus("failed");
+      await this.reporter.saveSummary(this.buildSummary("failed", reports));
       throw error;
     }
   }
@@ -273,10 +278,9 @@ export class RegressionRunner {
   }
 
   private async log(message: string, level: "info" | "warning" | "error" = "info"): Promise<void> {
-    const line = `[CoverIt] ${message}`;
-    if (level === "error") console.error(line);
-    else if (level === "warning") console.warn(line);
-    else console.log(line);
-    await this.reporter.log(line, level);
+    if (level === "error") this.logger.error("Runner", message);
+    else if (level === "warning") this.logger.warn("Runner", message);
+    else this.logger.info("Runner", message);
+    await this.reporter.log(message, level);
   }
 }

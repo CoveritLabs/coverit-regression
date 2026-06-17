@@ -3,7 +3,9 @@ import path from "path";
 import { Page } from "@playwright/test";
 
 import { loadCoveritConfig } from "@/config/coveritConfig";
+import { getCoveritRunId } from "@/config/coveritConfig";
 import { CoveritConfig, HealingCandidate, HealingContext, HealingResult, LocatorInfo } from "@/types";
+import { getArtifactPaths } from "@/utils/artifactPaths";
 
 export class HealingEngine {
   private readonly config: CoveritConfig;
@@ -282,9 +284,12 @@ export class HealingEngine {
 
   private appendArtifact(result: HealingResult): void {
     try {
-      const artifactPath = path.resolve(this.config.healing.artifactPath);
+      const artifactPath = getArtifactPaths(this.config, getCoveritRunId()).healing;
       fs.mkdirSync(path.dirname(artifactPath), { recursive: true });
-      fs.appendFileSync(artifactPath, `${JSON.stringify(result)}\n`, "utf8");
+      const context = result.context;
+      const title = [context?.featureName, context?.scenarioName, context?.stepLabel].filter(Boolean).join(" / ") || "Healing event";
+      const score = typeof result.score === "number" ? result.score.toFixed(3) : "n/a";
+      fs.appendFileSync(artifactPath, `## ${title}\n\n- Time: ${new Date().toISOString()}\n- Original selector: \`${result.originalSelector}\`\n- Healed selector: \`${result.healedSelector ?? "n/a"}\`\n- Score: ${score}\n- Reason: ${result.reason ?? "n/a"}\n\n`, "utf8");
     } catch {
       // Healing must never fail the test because artifact writing failed.
     }

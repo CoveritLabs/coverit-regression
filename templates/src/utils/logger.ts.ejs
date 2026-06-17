@@ -1,0 +1,78 @@
+import fs from "fs";
+import path from "path";
+
+type LogLevel = "info" | "warn" | "error";
+type LoggerOptions = { logFilePath?: string };
+
+const COLORS = {
+  reset: "\x1b[0m",
+  dim: "\x1b[2m",
+  blue: "\x1b[34m",
+  yellow: "\x1b[33m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+};
+
+const LABELS: Record<LogLevel, string> = {
+  info: "INFO ",
+  warn: "WARN ",
+  error: "ERROR",
+};
+
+const ICONS: Record<LogLevel, string> = {
+  info: "\u2713",
+  warn: "!",
+  error: "\u00d7",
+};
+
+export class Logger {
+  private logFilePath?: string;
+
+  constructor(logFilePath?: string) {
+    this.logFilePath = logFilePath;
+  }
+
+  configure(options: LoggerOptions): void {
+    this.logFilePath = options.logFilePath;
+    if (!this.logFilePath) return;
+    fs.mkdirSync(path.dirname(this.logFilePath), { recursive: true });
+  }
+
+  forScenario(): Logger {
+    return new Logger(this.logFilePath);
+  }
+
+  info(scope: string, message: string): void {
+    this.write("info", scope, message);
+  }
+
+  warn(scope: string, message: string): void {
+    this.write("warn", scope, message);
+  }
+
+  error(scope: string, message: string): void {
+    this.write("error", scope, message);
+  }
+
+  private write(level: LogLevel, scope: string, message: string): void {
+    const timestamp = new Date().toISOString();
+    const plainLine = `${timestamp} ${LABELS[level]} [${scope}] ${message}`;
+    const consoleLine = `${this.color(level, LABELS[level])} ${this.color("dim", `[${scope}]`)} ${this.icon(level)} ${message}`;
+    if (level === "error") console.error(consoleLine);
+    else if (level === "warn") console.warn(consoleLine);
+    else console.log(consoleLine);
+    if (this.logFilePath) fs.appendFileSync(this.logFilePath, `${plainLine}\n`, "utf8");
+  }
+
+  private icon(level: LogLevel): string {
+    return this.color(level === "info" ? "green" : level, ICONS[level]);
+  }
+
+  private color(color: LogLevel | "dim" | "green", value: string): string {
+    if (process.env.NO_COLOR) return value;
+    const code = color === "info" ? COLORS.blue : color === "warn" ? COLORS.yellow : color === "error" ? COLORS.red : COLORS[color];
+    return `${code}${value}${COLORS.reset}`;
+  }
+}
+
+export const logger = new Logger();
