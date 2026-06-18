@@ -38,7 +38,7 @@ export class CoveritApiClient {
     form.append("name", artifact.name);
     form.append("relativePath", artifact.relativePath);
     form.append("contentType", artifact.contentType);
-    form.append("metadata", JSON.stringify({ relativePath: artifact.relativePath }));
+    form.append("metadata", JSON.stringify({ relativePath: artifact.relativePath, ...(artifact.scenarioArtifactName ? { scenarioArtifactName: artifact.scenarioArtifactName } : {}) }));
     form.append("file", new Blob([new Uint8Array(fs.readFileSync(artifact.absolutePath))], { type: artifact.contentType }), artifact.name);
 
     await this.postForm(`/api/v1/regression/runs/${encodeURIComponent(identity.runId)}/artifacts`, form);

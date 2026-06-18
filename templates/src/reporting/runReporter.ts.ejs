@@ -9,17 +9,24 @@ import type { Page } from "@playwright/test";
 export class RunReporter {
   private static readonly warnedApiDisabledReasons = new Set<string>();
   private static readonly uploadedArtifactPaths = new Set<string>();
+  private static readonly scenarioArtifactMappings = new Map<string, { featureName?: string; scenarioName?: string; scenarioArtifactName: string }>();
   private readonly apiClient?: CoveritApiClient;
   private readonly artifactStore?: LocalArtifactStore;
   private readonly identity: RunIdentity;
   private readonly logger: Logger;
+  private scenarioStartedAt?: string;
 
   constructor(identity: Partial<RunIdentity> = {}, config = loadCoveritConfig()) {
     const runId = identity.runId ?? getCoveritRunId();
     logger.configure({ logFilePath: getArtifactPaths(config, runId).runLog });
-    this.logger = logger.forScenario();
     this.apiClient = config.api.enabled ? new CoveritApiClient(config) : undefined;
     this.artifactStore = config.reporting.localArtifactsEnabled ? new LocalArtifactStore(config, runId) : undefined;
+    const scenarioLogPath = this.artifactStore && identity.scenarioName ? this.artifactStore.getScenarioLogPath({
+      scenarioName: identity.scenarioName,
+      scenarioIndex: identity.scenarioIndex,
+      scenarioArtifactName: identity.scenarioArtifactName,
+    }) : undefined;
+    this.logger = logger.forScenario({ logFilePath: scenarioLogPath });
     if (config.reporting.apiDisabledReason && !RunReporter.warnedApiDisabledReasons.has(config.reporting.apiDisabledReason)) {
       RunReporter.warnedApiDisabledReasons.add(config.reporting.apiDisabledReason);
       logger.warn("CoverIt API", config.reporting.apiDisabledReason);
@@ -31,30 +38,100 @@ export class RunReporter {
       ...(config.run.versionId ? { versionId: config.run.versionId } : {}),
       ...identity,
     };
+    if (this.identity.scenarioName) {
+      RunReporter.scenarioArtifactMappings.set(`${this.identity.featureName ?? ""}::${this.identity.scenarioName}::${this.identity.scenarioIndex ?? ""}`, {
+        featureName: this.identity.featureName,
+        scenarioName: this.identity.scenarioName,
+        scenarioArtifactName: this.identity.scenarioArtifactName ?? this.identity.scenarioName,
+      });
+    }
   }
 
-  async scenarioStatus(status: ScenarioStatus): Promise<void> {
+  async scenarioStatus(status: ScenarioStatus, context: { designClassId?: string; designClassStep?: { keyword?: string; rawText?: string } } = {}): Promise<void> {
+    const timestamp = new Date().toISOString();
+    if (status === "running" || !this.scenarioStartedAt) this.scenarioStartedAt = timestamp;
+    const timing = status === "running"
+      ? { startedAt: this.scenarioStartedAt }
+      : {
+        startedAt: this.scenarioStartedAt,
+        finishedAt: timestamp,
+        durationMs: Math.max(0, new Date(timestamp).getTime() - new Date(this.scenarioStartedAt).getTime()),
+      };
+    const designClassPayload = context.designClassId ? {
+      designClassId: context.designClassId,
+      ...(context.designClassStep ? {
+        designClassStepText: context.designClassStep.rawText,
+        designClassStepKeyword: context.designClassStep.keyword,
+        bddStep: {
+          type: "DESIGN_CLASS",
+          id: context.designClassId,
+          keyword: context.designClassStep.keyword,
+          text: context.designClassStep.rawText,
+        },
+      } : {}),
+    } : {};
     this.artifactStore?.saveScenarioInfo({
       featureName: this.identity.featureName,
       scenarioName: this.identity.scenarioName,
       scenarioIndex: this.identity.scenarioIndex,
       scenarioArtifactName: this.identity.scenarioArtifactName,
       status,
-      ...(status === "running" ? { startedAt: new Date().toISOString() } : { finishedAt: new Date().toISOString() }),
+      ...timing,
     });
-    await this.event("scenario.status", { status });
+    await this.event("scenario.status", { status, ...timing, ...designClassPayload });
   }
 
-  async stepStatus(report: Pick<StepReport, "id" | "label" | "stepType">, status: StepStatus): Promise<void> {
-    await this.event("step.status", { status, stepId: report.id, stepLabel: report.label, stepType: report.stepType });
+  async stepStatus(report: Pick<StepReport, "id" | "label" | "stepType" | "stepText" | "stepKeyword">, status: StepStatus): Promise<void> {
+    await this.event("step.status", {
+      status,
+      stepId: report.id,
+      stepLabel: report.label,
+      stepType: report.stepType,
+      stepText: report.stepText,
+      stepKeyword: report.stepKeyword,
+      bddStep: {
+        type: report.stepType,
+        id: report.id,
+        label: report.label,
+        keyword: report.stepKeyword,
+        text: report.stepText,
+      },
+    });
   }
 
-  async assertionResult(report: Pick<StepReport, "id" | "label" | "stepType">, result: AssertionResult): Promise<void> {
-    await this.event("assertion.result", { stepId: report.id, stepLabel: report.label, stepType: report.stepType, result });
+  async assertionResult(report: Pick<StepReport, "id" | "label" | "stepType" | "stepText" | "stepKeyword">, result: AssertionResult): Promise<void> {
+    const bddStep = result.bddStep ?? {
+      type: report.stepType,
+      id: report.id,
+      label: report.label,
+      keyword: report.stepKeyword,
+      text: report.stepText,
+    };
+    await this.event("assertion.result", {
+      stepId: bddStep.id,
+      stepLabel: bddStep.label ?? report.label,
+      stepType: bddStep.type,
+      stepText: bddStep.text,
+      stepKeyword: bddStep.keyword,
+      parentStepId: report.id,
+      parentStepLabel: report.label,
+      parentStepType: report.stepType,
+      parentStepText: report.stepText,
+      parentStepKeyword: report.stepKeyword,
+      bddStep,
+      result,
+    });
     if (!result.passed && result.severity === "blocking") await this.failure({ report, result });
   }
 
   async log(message: string, level: "info" | "warning" | "error" = "info"): Promise<void> {
+    if (this.identity.scenarioName || this.identity.scenarioArtifactName || this.identity.scenarioIndex) this.artifactStore?.appendScenarioLog({
+      scenarioName: this.identity.scenarioName,
+      scenarioIndex: this.identity.scenarioIndex,
+      scenarioArtifactName: this.identity.scenarioArtifactName,
+      level,
+      message,
+    });
     await this.event("log", { level, message });
   }
 
@@ -82,7 +159,7 @@ export class RunReporter {
 
   async uploadArtifacts(scope: "all" | "run" | "scenario" = "all", options: { maxDurationMs?: number } = {}): Promise<void> {
     if (!this.apiClient || !this.artifactStore) return;
-    const artifacts = this.artifactStore.listArtifacts(scope, this.identity.scenarioIndex, this.identity.scenarioArtifactName);
+    const artifacts = this.artifactStore.listArtifacts(scope, this.identity.scenarioIndex, this.identity.scenarioArtifactName, [...RunReporter.scenarioArtifactMappings.values()]);
     if (artifacts.length === 0) return;
 
     const startedAt = Date.now();

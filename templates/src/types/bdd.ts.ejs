@@ -15,6 +15,12 @@ export interface RuntimeStepPlan {
 export interface RuntimeScenarioPlan {
   name: string;
   designClassId?: string;
+  designClassStep?: {
+    type: "DESIGN_CLASS";
+    id: string;
+    keyword: BddKeyword;
+    rawText: string;
+  };
   steps: RuntimeStepPlan[];
 }
 

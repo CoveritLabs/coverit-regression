@@ -26,20 +26,21 @@ const ICONS: Record<LogLevel, string> = {
 };
 
 export class Logger {
-  private logFilePath?: string;
+  private readonly logFilePaths: string[];
 
-  constructor(logFilePath?: string) {
-    this.logFilePath = logFilePath;
+  constructor(logFilePaths: string[] = []) {
+    this.logFilePaths = logFilePaths;
   }
 
   configure(options: LoggerOptions): void {
-    this.logFilePath = options.logFilePath;
-    if (!this.logFilePath) return;
-    fs.mkdirSync(path.dirname(this.logFilePath), { recursive: true });
+    this.logFilePaths.length = 0;
+    if (options.logFilePath) this.logFilePaths.push(options.logFilePath);
+    for (const logFilePath of this.logFilePaths) fs.mkdirSync(path.dirname(logFilePath), { recursive: true });
   }
 
-  forScenario(): Logger {
-    return new Logger(this.logFilePath);
+  forScenario(options: LoggerOptions = {}): Logger {
+    const logFilePath = options.logFilePath;
+    return new Logger([...this.logFilePaths, ...(logFilePath ? [logFilePath] : [])]);
   }
 
   info(scope: string, message: string): void {
@@ -61,7 +62,7 @@ export class Logger {
     if (level === "error") console.error(consoleLine);
     else if (level === "warn") console.warn(consoleLine);
     else console.log(consoleLine);
-    if (this.logFilePath) fs.appendFileSync(this.logFilePath, `${plainLine}\n`, "utf8");
+    for (const logFilePath of this.logFilePaths) fs.appendFileSync(logFilePath, `${plainLine}\n`, "utf8");
   }
 
   private icon(level: LogLevel): string {

@@ -31,6 +31,8 @@ export interface StepReport {
   stepType: string;
   id: string;
   label: string;
+  stepText?: string;
+  stepKeyword?: string;
   results: AssertionResult[];
   allPassed: boolean;
 }
@@ -52,4 +54,5 @@ export interface RegressionArtifactFile {
   name: string;
   kind: RegressionArtifactKind;
   contentType: string;
+  scenarioArtifactName?: string;
 }
