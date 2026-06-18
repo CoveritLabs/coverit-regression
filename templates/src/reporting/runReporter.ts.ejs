@@ -26,6 +26,7 @@ export class RunReporter {
     }
     this.identity = {
       runId,
+      runName: config.run.name,
       applicationId: config.run.applicationId,
       ...(config.run.versionId ? { versionId: config.run.versionId } : {}),
       ...identity,
@@ -37,6 +38,7 @@ export class RunReporter {
       featureName: this.identity.featureName,
       scenarioName: this.identity.scenarioName,
       scenarioIndex: this.identity.scenarioIndex,
+      scenarioArtifactName: this.identity.scenarioArtifactName,
       status,
       ...(status === "running" ? { startedAt: new Date().toISOString() } : { finishedAt: new Date().toISOString() }),
     });
@@ -72,6 +74,7 @@ export class RunReporter {
       featureName: this.identity.featureName,
       scenarioName: this.identity.scenarioName,
       scenarioIndex: this.identity.scenarioIndex,
+      scenarioArtifactName: this.identity.scenarioArtifactName,
       error: error instanceof Error ? error : new Error(String(error)),
       screenshot: () => page.screenshot({ fullPage: true }),
     });
@@ -79,7 +82,7 @@ export class RunReporter {
 
   async uploadArtifacts(scope: "all" | "run" | "scenario" = "all", options: { maxDurationMs?: number } = {}): Promise<void> {
     if (!this.apiClient || !this.artifactStore) return;
-    const artifacts = this.artifactStore.listArtifacts(scope, this.identity.scenarioIndex);
+    const artifacts = this.artifactStore.listArtifacts(scope, this.identity.scenarioIndex, this.identity.scenarioArtifactName);
     if (artifacts.length === 0) return;
 
     const startedAt = Date.now();

@@ -3,7 +3,7 @@ import path from "path";
 
 import { CoveritConfig } from "@/types";
 import { RegressionArtifactFile, RegressionArtifactKind } from "@/types";
-import { getArtifactPaths, getPlaywrightScenarioDir, toRelativeArtifactPath } from "@/utils/artifactPaths";
+import { getArtifactPaths, getPlaywrightScenarioDir, sanitizeArtifactFolderName, toRelativeArtifactPath } from "@/utils/artifactPaths";
 
 export class LocalArtifactStore {
   private readonly paths: ReturnType<typeof getArtifactPaths>;
@@ -24,26 +24,12 @@ export class LocalArtifactStore {
     this.write(this.paths.summary, JSON.stringify(summary, null, 2));
   }
 
-  saveScenarioInfo(input: { featureName?: string; scenarioName?: string; scenarioIndex?: number; status: string; startedAt?: string; finishedAt?: string }): void {
-    if (!input.scenarioIndex) return;
-    const scenarioKey = [input.featureName ?? "", input.scenarioName ?? ""].join("::");
-    const scenarioDir = getPlaywrightScenarioDir(this.paths, input.scenarioIndex);
-    const scenarioPath = path.join(scenarioDir, "scenario.json");
-    const previous = this.readJsonObject(scenarioPath);
-    this.write(scenarioPath, JSON.stringify({
-      ...previous,
-      featureName: input.featureName,
-      scenarioName: input.scenarioName,
-      scenarioKey,
-      scenarioIndex: input.scenarioIndex,
-      status: input.status,
-      startedAt: input.startedAt ?? previous.startedAt,
-      finishedAt: input.finishedAt ?? previous.finishedAt,
-    }, null, 2));
+  saveScenarioInfo(_input: { featureName?: string; scenarioName?: string; scenarioIndex?: number; scenarioArtifactName?: string; status: string; startedAt?: string; finishedAt?: string }): void {
+    return;
   }
 
-  async savePlaywrightFailureArtifacts(input: { featureName?: string; scenarioName?: string; scenarioIndex?: number; error: Error; screenshot?: () => Promise<Buffer> }): Promise<void> {
-    const scenarioDir = getPlaywrightScenarioDir(this.paths, input.scenarioIndex);
+  async savePlaywrightFailureArtifacts(input: { featureName?: string; scenarioName?: string; scenarioIndex?: number; scenarioArtifactName?: string; error: Error; screenshot?: () => Promise<Buffer> }): Promise<void> {
+    const scenarioDir = getPlaywrightScenarioDir(this.paths, input.scenarioArtifactName, input.scenarioName, input.scenarioIndex);
     this.write(path.join(scenarioDir, "error.md"), `# ${input.scenarioName ?? "Scenario failure"}\n\n- Feature: ${input.featureName ?? "n/a"}\n- Time: ${new Date().toISOString()}\n\n## Error\n\n\`\`\`text\n${input.error.stack ?? input.error.message}\n\`\`\`\n`);
     if (!input.screenshot) return;
     try {
@@ -54,10 +40,10 @@ export class LocalArtifactStore {
     }
   }
 
-  listArtifacts(scope: "all" | "run" | "scenario" = "all", scenarioIndex?: number): RegressionArtifactFile[] {
+  listArtifacts(scope: "all" | "run" | "scenario" = "all", scenarioIndex?: number, scenarioArtifactName?: string): RegressionArtifactFile[] {
     if (!fs.existsSync(this.paths.runRoot)) return [];
     return this.walk(this.paths.runRoot)
-      .filter((absolutePath) => this.isInScope(absolutePath, scope, scenarioIndex))
+      .filter((absolutePath) => this.isInScope(absolutePath, scope, scenarioIndex, scenarioArtifactName))
       .filter((absolutePath) => isUploadCandidate(toRelativeArtifactPath(this.paths, absolutePath)))
       .map((absolutePath) => {
       const relativePath = toRelativeArtifactPath(this.paths, absolutePath);
@@ -71,13 +57,14 @@ export class LocalArtifactStore {
     });
   }
 
-  private isInScope(absolutePath: string, scope: "all" | "run" | "scenario", scenarioIndex?: number): boolean {
+  private isInScope(absolutePath: string, scope: "all" | "run" | "scenario", scenarioIndex?: number, scenarioArtifactName?: string): boolean {
     if (scope === "all") return true;
     const relativePath = toRelativeArtifactPath(this.paths, absolutePath);
-    const scenarioPrefix = scenarioIndex ? `playwright/scenario_${scenarioIndex}/` : "";
+    const scenarioSegment = scenarioArtifactName ? sanitizeArtifactFolderName(scenarioArtifactName) : scenarioIndex ? `scenario-${scenarioIndex}` : "";
+    const scenarioPrefix = scenarioSegment ? `playwright/scenarios/${scenarioSegment}/` : "playwright/scenarios/";
     if (scope === "scenario") return Boolean(scenarioPrefix && relativePath.startsWith(scenarioPrefix));
     if (scenarioPrefix && relativePath.startsWith(scenarioPrefix)) return false;
-    return !/^playwright\/scenario_\d+\//.test(relativePath);
+    return !relativePath.startsWith(scenarioPrefix);
   }
 
   private append(filePath: string, content: string): void {
@@ -93,16 +80,6 @@ export class LocalArtifactStore {
   private writeBuffer(filePath: string, content: Buffer): void {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, content);
-  }
-
-  private readJsonObject(filePath: string): Record<string, unknown> {
-    if (!fs.existsSync(filePath)) return {};
-    try {
-      const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-    } catch {
-      return {};
-    }
   }
 
   private walk(directory: string): string[] {

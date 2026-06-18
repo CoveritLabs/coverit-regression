@@ -33,8 +33,9 @@ export function getArtifactPaths(config: Pick<CoveritConfig, "reporting">, runId
   };
 }
 
-export function getPlaywrightScenarioDir(paths: ArtifactPaths, scenarioIndex?: number): string {
-  return path.join(paths.playwrightRoot, `scenario_${Math.max(1, scenarioIndex ?? 1)}`);
+export function getPlaywrightScenarioDir(paths: ArtifactPaths, scenarioArtifactName?: string, scenarioName?: string, scenarioIndex?: number): string {
+  const fallback = scenarioIndex ? `scenario-${scenarioIndex}` : "scenario";
+  return path.join(paths.playwrightRoot, "scenarios", sanitizeArtifactFolderName(scenarioArtifactName ?? scenarioName ?? fallback));
 }
 
 export function toRelativeArtifactPath(paths: ArtifactPaths, absolutePath: string): string {
@@ -46,6 +47,14 @@ export function slugify(value: string): string {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "artifact";
+}
+
+export function sanitizeArtifactFolderName(value: string): string {
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || "artifact";
 }

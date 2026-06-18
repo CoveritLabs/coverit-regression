@@ -37,7 +37,7 @@ function resolveConfig(config: CoveritConfig): CoveritConfig {
   const baseUrl = config.api.baseUrl ? config.api.baseUrl.replace(/\/+$/, "") : "";
   return {
     ...config,
-    run: { ...config.run, applicationId: config.run?.applicationId || "", versionId: config.run?.versionId || undefined },
+    run: { ...config.run, name: config.run?.name?.trim() || "Run", applicationId: config.run?.applicationId || "", versionId: config.run?.versionId || undefined },
     api: { ...config.api, enabled: apiEnabled, baseUrl },
     reporting: { ...config.reporting, apiDisabledReason },
   };

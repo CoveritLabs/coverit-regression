@@ -12,6 +12,7 @@ import { RunReporter } from "@/reporting/runReporter";
 const featuresDir = path.resolve(__dirname, "../features");
 const features = new BddLoader().loadAll(featuresDir);
 const reporters = new Map<string, RunReporter>();
+const scenarioNameOccurrences = new Map<string, number>();
 let scenarioIndex = 0;
 
 test.afterEach(async ({}, testInfo) => {
@@ -30,8 +31,11 @@ for (const feature of features) {
   test.describe(feature.name, () => {
     for (const scenario of feature.scenarios) {
       const currentScenarioIndex = ++scenarioIndex;
+      const scenarioNameCount = (scenarioNameOccurrences.get(scenario.name) ?? 0) + 1;
+      scenarioNameOccurrences.set(scenario.name, scenarioNameCount);
+      const scenarioArtifactName = scenarioNameCount === 1 ? scenario.name : `${scenario.name}-${scenarioNameCount}`;
       test(scenario.name, async ({ page }: { page: Page }, testInfo) => {
-        const reporter = new RunReporter({ featureName: feature.name, scenarioName: scenario.name, scenarioIndex: currentScenarioIndex });
+        const reporter = new RunReporter({ featureName: feature.name, scenarioName: scenario.name, scenarioIndex: currentScenarioIndex, scenarioArtifactName });
         reporters.set(testInfo.testId, reporter);
         await new RegressionRunner(page, { reporter, featureName: feature.name, scenarioName: scenario.name }).runScenario(scenario);
       });

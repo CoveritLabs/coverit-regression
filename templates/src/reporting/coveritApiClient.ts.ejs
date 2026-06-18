@@ -15,17 +15,19 @@ export class CoveritApiClient {
     await this.post("send event", `/api/v1/regression/runs/${encodeURIComponent(event.runId)}/events`, event);
   }
 
-  async completeRun(identity: Pick<RegressionEvent, "runId" | "applicationId" | "versionId">, summary: RunSummary): Promise<void> {
+  async completeRun(identity: Pick<RegressionEvent, "runId" | "runName" | "applicationId" | "versionId">, summary: RunSummary): Promise<void> {
     await this.post("complete run", `/api/v1/regression/runs/${encodeURIComponent(identity.runId)}/complete`, {
       applicationId: identity.applicationId,
+      runName: identity.runName,
       ...(identity.versionId ? { versionId: identity.versionId } : {}),
       summary,
     });
   }
 
-  async uploadArtifact(identity: Pick<RegressionEvent, "runId" | "applicationId" | "versionId" | "featureName" | "scenarioName">, artifact: RegressionArtifactFile): Promise<void> {
+  async uploadArtifact(identity: Pick<RegressionEvent, "runId" | "runName" | "applicationId" | "versionId" | "featureName" | "scenarioName">, artifact: RegressionArtifactFile): Promise<void> {
     const form = new FormData();
     form.append("applicationId", identity.applicationId);
+    form.append("runName", identity.runName);
     if (identity.versionId) form.append("versionId", identity.versionId);
     if (identity.featureName || identity.scenarioName) {
       form.append("scenarioKey", [identity.featureName ?? "", identity.scenarioName ?? ""].join("::"));
