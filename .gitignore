@@ -17,6 +17,7 @@ dist
 dist-test
 dist-ssr
 *.local
+tmp/*
 output/*
 .generated/*
 
