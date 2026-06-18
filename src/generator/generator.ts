@@ -32,9 +32,9 @@ class Generator {
 
   constructor(options: GeneratorOptions) {
     this.options = options;
-    this.bddReader = new BddReader();
+    this.bddReader = new BddReader(FileHandler.join(options.inputPath, "features"));
     this.fileEmitter = new FileEmitter();
-    this.frameworkMappingReader = new FrameworkMappingReader();
+    this.frameworkMappingReader = new FrameworkMappingReader(FileHandler.join(options.inputPath, "framework-mapping"));
     this.templateHandler = new TemplateHandler();
     this.templateContextBuilder = new TemplateContextBuilder();
     this.manifestReader = new ManifestReader(options.outputPath);
@@ -75,7 +75,7 @@ class Generator {
     this.bddMappingValidator.validate(parsedFeatures, mapping);
     const model = this.frameworkMappingReader.buildGeneratedFrameworkModel(mapping);
 
-    const templateContext = this.templateContextBuilder.build(model);
+    const templateContext = this.templateContextBuilder.build(model, this.options.generatedConfig);
     const templates = this.templateHandler.scan();
     const materializedTemplates = await this.fileEmitter.materialize(templates, { context: templateContext });
 

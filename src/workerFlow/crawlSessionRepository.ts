@@ -1,0 +1,98 @@
+// Copyright (c) 2026 CoverIt Labs. All Rights Reserved.
+// Proprietary and confidential. Unauthorized use is strictly prohibited.
+// See LICENSE file in the project root for full license information.
+
+import { Pool } from "pg";
+
+import type { CrawlSessionCodegenContext, CrawlSessionRepository, WorkerCodegenConfig } from "@/types/worker";
+
+interface CrawlSessionCodegenRow {
+  session_id: string;
+  app_version_id: string;
+  base_url_snapshot: string | null;
+  session_codegen_config: unknown;
+  target_application_id: string;
+  target_application_base_url: string;
+  regression_codebase_id: string | null;
+  framework_name: string | null;
+  repository_url: string | null;
+  repo_api_key: string | null;
+}
+
+export default class PostgresCrawlSessionRepository implements CrawlSessionRepository {
+  private readonly pool: Pool;
+
+  constructor(connectionString: string | undefined = process.env.DATABASE_URL) {
+    if (!connectionString) throw new Error("[Worker] DATABASE_URL is required to load crawl session context.");
+    this.pool = new Pool({ connectionString });
+  }
+
+  async findCodegenContext(sessionId: string): Promise<CrawlSessionCodegenContext> {
+    const result = await this.pool.query<CrawlSessionCodegenRow>(
+      `
+        SELECT
+          cs.crawl_session_id AS session_id,
+          cs.app_version_id AS app_version_id,
+          cs.base_url_snapshot AS base_url_snapshot,
+          cs.codegen_config AS session_codegen_config,
+          ta.id AS target_application_id,
+          ta.base_url AS target_application_base_url,
+          rc.id AS regression_codebase_id,
+          rc.framework_name AS framework_name,
+          rc.repository_url AS repository_url,
+          rc.api_key AS repo_api_key
+        FROM crawl_sessions cs
+        INNER JOIN target_application_versions tav
+          ON tav.id = cs.app_version_id
+        INNER JOIN target_applications ta
+          ON ta.id = tav.target_application_id
+        LEFT JOIN regression_codebases rc
+          ON rc.id = cs.regression_codebase_id
+        WHERE cs.crawl_session_id = $1
+        LIMIT 1
+      `,
+      [sessionId],
+    );
+
+    const row = result.rows[0];
+    if (!row) throw new Error(`[Worker] Crawl session was not found: ${sessionId}`);
+
+    return {
+      sessionId: row.session_id,
+      appVersionId: row.app_version_id,
+      baseUrlSnapshot: row.base_url_snapshot ?? undefined,
+      sessionCodegenConfig: parseCodegenConfig(row.session_codegen_config),
+      targetApplication: {
+        id: row.target_application_id,
+        baseUrl: row.target_application_base_url,
+      },
+      regressionCodebase: row.regression_codebase_id
+        ? {
+            id: row.regression_codebase_id,
+            frameworkName: row.framework_name ?? undefined,
+            repositoryUrl: row.repository_url ?? undefined,
+            apiKey: row.repo_api_key ?? undefined,
+          }
+        : undefined,
+    };
+  }
+
+  async close(): Promise<void> {
+    await this.pool.end();
+  }
+}
+
+function parseCodegenConfig(value: unknown): WorkerCodegenConfig | undefined {
+  if (!value) return undefined;
+  if (typeof value === "string") {
+    try {
+      return parseCodegenConfig(JSON.parse(value));
+    } catch {
+      throw new Error("[Worker] codegenConfig JSON could not be parsed.");
+    }
+  }
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("[Worker] codegenConfig must be a JSON object.");
+  }
+  return value as WorkerCodegenConfig;
+}

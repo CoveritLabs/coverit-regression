@@ -11,18 +11,20 @@ import {
   TemplateMetadata,
   TemplateRenderContext,
 } from "@/types/templates";
+import type { GeneratedProjectConfig } from "@/types/generator";
 import TypeScriptObjectEmitter from "./typeScriptObjectEmitter";
 
 class TemplateContextBuilder {
   private readonly objectEmitter = new TypeScriptObjectEmitter();
 
-  build(model: GeneratedFrameworkModel): TemplateRenderContext {
+  build(model: GeneratedFrameworkModel, config: GeneratedProjectConfig = {}): TemplateRenderContext {
     return {
       model,
       metadata: this.buildMetadata(model),
       helpers: {
         ts: (value: unknown) => this.objectEmitter.emit(value),
       },
+      config,
     };
   }
 

@@ -17,18 +17,20 @@ const REGEX = {
 
 class BddReader {
   features: FileEntry[] = [];
+  private readonly featuresPath: string;
 
-  constructor() {
-    if (!FileHandler.exists(PATHS.BDD_FEATURES)) {
+  constructor(featuresPath: string = PATHS.BDD_FEATURES) {
+    this.featuresPath = featuresPath;
+    if (!FileHandler.exists(this.featuresPath)) {
       throw new Error(
-        `${PATHS.BDD_FEATURES} does not exist. Please create the directory and add your .feature files there.`,
+        `${this.featuresPath} does not exist. Please create the directory and add your .feature files there.`,
       );
     }
   }
 
   scan(): FileEntry[] {
-    logger.info(`[BDD Reader] Scanning for .feature files in ${PATHS.BDD_FEATURES}...`);
-    const files = FileHandler.scanDirectory(PATHS.BDD_FEATURES);
+    logger.info(`[BDD Reader] Scanning for .feature files in ${this.featuresPath}...`);
+    const files = FileHandler.scanDirectory(this.featuresPath);
     this.features = FileHandler.filterByExtension(files, ".feature");
     logger.info(`[BDD Reader] Found ${this.features.length} .feature file(s).`);
     return this.features;

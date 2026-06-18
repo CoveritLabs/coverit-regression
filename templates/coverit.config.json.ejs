@@ -1,0 +1,23 @@
+{
+  "application": {
+    "baseUrl": "<%- config.applicationBaseUrl || "http://localhost:3000" %>"
+  },
+  "run": {
+    "name": "Run",
+    "applicationId": "<%- config.applicationId || "" %>",
+    "versionId": "<%- config.versionId || "" %>"
+  },
+  "api": {
+    "enabled": false,
+    "baseUrl": "<%- config.coveritApiBaseUrl || "http://localhost:8080" %>",
+    "apiKey": ""
+  },
+  "reporting": {
+    "localArtifactsEnabled": <%- config.localArtifactsEnabled ?? true %>,
+    "artifactRoot": "<%- config.artifactRoot || "artifacts" %>"
+  },
+  "healing": {
+    "enabled": <%- config.healingEnabled ?? true %>,
+    "threshold": <%- config.healingThreshold ?? 0.55 %>
+  }
+}
