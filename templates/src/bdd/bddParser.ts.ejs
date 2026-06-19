@@ -35,6 +35,7 @@ export class BddParser {
       const designClassId = stepText.match(BDD_PATTERNS.designClass)?.[1];
       if (designClassId) {
         currentScenario.designClassId = designClassId;
+        currentScenario.designClassStep = { type: "DESIGN_CLASS", id: designClassId, keyword, rawText: line };
         continue;
       }
 

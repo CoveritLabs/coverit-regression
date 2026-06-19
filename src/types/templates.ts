@@ -13,11 +13,13 @@ import {
   StateDomMapping,
   TransitionActionMapping,
 } from "./framework";
+import type { GeneratedProjectConfig } from "./generator";
 
 export interface TemplateRenderContext {
   model: GeneratedFrameworkModel;
   metadata: TemplateMetadata;
   helpers: TemplateRenderHelpers;
+  config: GeneratedProjectConfig;
 }
 
 export interface TemplateRenderHelpers {

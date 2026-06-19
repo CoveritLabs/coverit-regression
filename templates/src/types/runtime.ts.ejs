@@ -23,6 +23,8 @@ export interface HealingContext {
   stepType: string;
   stepId: string;
   stepLabel: string;
+  stepText?: string;
+  stepKeyword?: string;
   action?: string;
   stateId?: string;
   locatorKey?: string;
@@ -66,4 +68,11 @@ export interface AssertionResult {
   message: string;
   details?: string;
   healingInfo?: HealingInfo;
+  bddStep?: {
+    type: string;
+    id: string;
+    label?: string;
+    keyword?: string;
+    text?: string;
+  };
 }

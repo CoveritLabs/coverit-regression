@@ -10,12 +10,14 @@ import { Registry } from "@/registry/registry";
 import { RunReporter } from "@/reporting/runReporter";
 import { ActionHookInfo, AssertionInfo, AssertionResult, HealingInfo, RegressionRunnerOptions, RunSummary, RuntimeScenarioPlan, RuntimeStepPlan, StepReport } from "@/types";
 import { extensionHooks } from "@/extensions";
+import { logger, Logger } from "@/utils/logger";
 
 export class RegressionRunner {
   private readonly runOrigin?: string;
   private readonly featureName?: string;
   private readonly scenarioName?: string;
   private readonly reporter: RunReporter;
+  private readonly logger: Logger;
   private readonly healingEngine = new HealingEngine();
   private startedAt = new Date().toISOString();
   private designRuntime = new DesignClassRuntime(DESIGN_CLASS_INFO);
@@ -25,6 +27,7 @@ export class RegressionRunner {
     this.featureName = options.featureName;
     this.scenarioName = options.scenarioName;
     this.reporter = options.reporter ?? new RunReporter();
+    this.logger = logger.forScenario();
     this.designRuntime.injectHealingEngine(this.healingEngine);
   }
 
@@ -36,7 +39,11 @@ export class RegressionRunner {
       throw new Error(`Unknown design class "${scenario.designClassId}". Expected "${DESIGN_CLASS_INFO.id}".`);
     }
 
-    await this.reporter.scenarioStatus("running");
+    this.logger.info("Scenario", `Feature: ${this.featureName ?? "n/a"} | Scenario: ${scenario.name}`);
+    await this.reporter.scenarioStatus("running", {
+      designClassId: scenario.designClassId,
+      designClassStep: scenario.designClassStep,
+    });
     await this.log(`SCENARIO START: ${scenario.name}`);
     try {
       for (const step of scenario.steps) {
@@ -49,14 +56,21 @@ export class RegressionRunner {
         this.throwOnBlockingFailure(report);
       }
 
+      await this.reporter.scenarioStatus("passed", {
+        designClassId: scenario.designClassId,
+        designClassStep: scenario.designClassStep,
+      });
       await this.reporter.saveSummary(this.buildSummary("passed", reports));
-      await this.reporter.scenarioStatus("passed");
       await this.logSummary("passed", reports);
     } catch (error) {
       await this.log(`SCENARIO FAILED: ${scenario.name} -> ${(error as Error).message}`, "error");
+      await this.reporter.captureFailureArtifacts(this.page, error);
       await this.reporter.failure({ message: (error as Error).message, stack: (error as Error).stack });
+      await this.reporter.scenarioStatus("failed", {
+        designClassId: scenario.designClassId,
+        designClassStep: scenario.designClassStep,
+      });
       await this.reporter.saveSummary(this.buildSummary("failed", reports));
-      await this.reporter.scenarioStatus("failed");
       throw error;
     }
   }
@@ -64,15 +78,15 @@ export class RegressionRunner {
   private async runState(step: RuntimeStepPlan, assertions: RuntimeStepPlan[]): Promise<StepReport> {
     const state = Registry.resolveState(step.id);
     await this.log(`STATE START: ${state.label} (${state.id})`);
-    await this.reporter.stepStatus({ id: state.id, label: state.label, stepType: "STATE" }, "running");
+    await this.reporter.stepStatus({ id: state.id, label: state.label, stepType: "STATE", stepText: step.rawText, stepKeyword: step.keyword }, "running");
 
     const results = step.keyword === "Given"
       ? (await state.setup(this.page, this.runOrigin), await state.assert(this.page, this.runOrigin))
       : await state.assert(this.page, this.runOrigin);
 
-    for (const assertionStep of assertions) results.push(await this.executeAssertion(assertionStep.id));
+    for (const assertionStep of assertions) results.push(await this.executeAssertion(assertionStep));
 
-    const report = this.report("STATE", state.id, state.label, results);
+    const report = this.report("STATE", state.id, state.label, results, step);
     await this.emitResults(report);
     await this.log(`STATE END: ${state.label} (${report.allPassed ? "passed" : "failed"})`);
     return report;
@@ -82,25 +96,26 @@ export class RegressionRunner {
     const transition = Registry.resolveTransition(step.id);
     transition.injectHealingEngine(this.healingEngine);
     await this.log(`TRANSITION START: ${transition.label} (${transition.id})`);
-    await this.reporter.stepStatus({ id: transition.id, label: transition.label, stepType: "TRANSITION" }, "running");
+    await this.reporter.stepStatus({ id: transition.id, label: transition.label, stepType: "TRANSITION", stepText: step.rawText, stepKeyword: step.keyword }, "running");
 
     const results: AssertionResult[] = [];
-    for (const hook of hooks.filter((candidate) => candidate.hookTiming === "pre")) results.push(await this.executeHook(hook.id));
+    for (const hook of hooks.filter((candidate) => candidate.hookTiming === "pre")) results.push(await this.executeHook(hook));
     results.push(...(await transition.perform(this.page, {
       featureName: this.featureName,
       scenarioName: this.scenarioName ?? step.rawText,
     })));
-    for (const hook of hooks.filter((candidate) => candidate.hookTiming !== "pre")) results.push(await this.executeHook(hook.id));
+    for (const hook of hooks.filter((candidate) => candidate.hookTiming !== "pre")) results.push(await this.executeHook(hook));
 
-    const report = this.report("TRANSITION", transition.id, transition.label, results);
+    const report = this.report("TRANSITION", transition.id, transition.label, results, step);
     await this.emitResults(report);
     await this.log(`TRANSITION END: ${transition.label} (${report.allPassed ? "passed" : "failed"})`);
     return report;
   }
 
-  private async executeAssertion(assertionId: string): Promise<AssertionResult> {
+  private async executeAssertion(step: RuntimeStepPlan): Promise<AssertionResult> {
+    const assertionId = step.id;
     const assertion = (ASSERTION_INFO as Record<string, AssertionInfo>)[assertionId];
-    if (!assertion) return failed("Assertion", `Unknown assertion "${assertionId}".`);
+    if (!assertion) return this.withBddStep(failed("Assertion", `Unknown assertion "${assertionId}".`), step, "Assertion");
 
     try {
       const definition = assertion.definition;
@@ -110,26 +125,29 @@ export class RegressionRunner {
         stepType: "ASSERTION",
         stepId: assertion.id,
         stepLabel: assertion.label,
+        stepText: step.rawText,
+        stepKeyword: step.keyword,
       });
-      if (definition.type === "design-operation") return this.designRuntime.assertOperation(definition.operationId, this.page, definition.args);
-      if (definition.type === "user-assertion") return this.designRuntime.runAssertionFunction(definition.functionId, this.page, definition.args);
-      if (definition.type === "page") return this.assertPage(assertion, definition);
-      if (definition.type === "element") return this.assertElement(assertion, definition);
-      return passed(assertion.label, `${definition.assertion} assertion is deferred.`, assertion.severity ?? "warning");
+      if (definition.type === "design-operation") return this.withBddStep(await this.designRuntime.assertOperation(definition.operationId, this.page, definition.args), step, assertion.label);
+      if (definition.type === "user-assertion") return this.withBddStep(await this.designRuntime.runAssertionFunction(definition.functionId, this.page, definition.args), step, assertion.label);
+      if (definition.type === "page") return this.withBddStep(await this.assertPage(assertion, definition), step, assertion.label);
+      if (definition.type === "element") return this.withBddStep(await this.assertElement(assertion, definition, step), step, assertion.label);
+      return this.withBddStep(passed(assertion.label, `${definition.assertion} assertion is deferred.`, assertion.severity ?? "warning"), step, assertion.label);
     } catch (error) {
-      return failed(assertion.label, (error as Error).message, assertion.severity ?? "blocking");
+      return this.withBddStep(failed(assertion.label, (error as Error).message, assertion.severity ?? "blocking"), step, assertion.label);
     }
   }
 
-  private async executeHook(hookId: string): Promise<AssertionResult> {
+  private async executeHook(step: RuntimeStepPlan): Promise<AssertionResult> {
+    const hookId = step.id;
     const extensionHook = extensionHooks[hookId];
     if (extensionHook) {
       await extensionHook(this.page);
-      return passed("Extension Hook", `Executed extension hook "${hookId}".`);
+      return this.withBddStep(passed("Extension Hook", `Executed extension hook "${hookId}".`), step, "Extension Hook");
     }
 
     const hook = (ACTION_HOOK_INFO as Record<string, ActionHookInfo>)[hookId];
-    if (!hook) return failed("Action Hook", `Unknown action hook "${hookId}".`);
+    if (!hook) return this.withBddStep(failed("Action Hook", `Unknown action hook "${hookId}".`), step, "Action Hook");
 
     try {
       const definition = hook.definition;
@@ -139,16 +157,18 @@ export class RegressionRunner {
         stepType: "ACTION_HOOK",
         stepId: hook.id,
         stepLabel: hook.label,
+        stepText: step.rawText,
+        stepKeyword: step.keyword,
       });
-      if (definition.type === "design-operation") return this.designRuntime.executeOperation(definition.operationId, this.page, definition.args);
+      if (definition.type === "design-operation") return this.withBddStep(await this.designRuntime.executeOperation(definition.operationId, this.page, definition.args), step, hook.label);
       if (definition.type === "extract") {
         this.designRuntime.store.set(definition.storeKey, await this.designRuntime.extract(definition.extractId, this.page));
-        return passed(hook.label, `Extracted "${definition.extractId}" into "${definition.storeKey}".`);
+        return this.withBddStep(passed(hook.label, `Extracted "${definition.extractId}" into "${definition.storeKey}".`), step, hook.label);
       }
       if (definition.type === "utility") {
         if (definition.action === "wait") await this.page.waitForTimeout(definition.durationMs ?? 0);
         else await this.page.reload({ waitUntil: "networkidle" });
-        return passed(hook.label, `Executed utility action "${definition.action}".`);
+        return this.withBddStep(passed(hook.label, `Executed utility action "${definition.action}".`), step, hook.label);
       }
 
       const locatorInfo = resolveLocatorInfo(definition.locator, definition.stateId, definition.locatorKey);
@@ -159,6 +179,8 @@ export class RegressionRunner {
         stepType: "ACTION_HOOK",
         stepId: hook.id,
         stepLabel: hook.label,
+        stepText: step.rawText,
+        stepKeyword: step.keyword,
         action: definition.action,
         stateId: definition.stateId,
         locatorKey: definition.locatorKey,
@@ -173,9 +195,9 @@ export class RegressionRunner {
       else if (definition.action === "check") await locator.check();
       else if (definition.action === "uncheck") await locator.uncheck();
       await this.page.waitForLoadState("networkidle").catch(() => undefined);
-      return passed(hook.label, `Executed hook "${hookId}".`, "blocking", this.toHealingInfo(healing));
+      return this.withBddStep(passed(hook.label, `Executed hook "${hookId}".`, "blocking", this.toHealingInfo(healing)), step, hook.label);
     } catch (error) {
-      return failed(hook.label, (error as Error).message);
+      return this.withBddStep(failed(hook.label, (error as Error).message), step, hook.label);
     }
   }
 
@@ -186,7 +208,7 @@ export class RegressionRunner {
     return passed(assertion.label, `Page assertion "${definition.assertion}" passed.`, assertion.severity ?? "blocking");
   }
 
-  private async assertElement(assertion: AssertionInfo, definition: Extract<AssertionInfo["definition"], { type: "element" }>): Promise<AssertionResult> {
+  private async assertElement(assertion: AssertionInfo, definition: Extract<AssertionInfo["definition"], { type: "element" }>, step: RuntimeStepPlan): Promise<AssertionResult> {
     const locatorInfo = resolveLocatorInfo(definition.locator, definition.stateId, definition.locatorKey);
     if (!locatorInfo) throw new Error(`Assertion "${assertion.id}" is missing locator information.`);
     const healing = await this.healingEngine.findElement(this.page, locatorInfo, {
@@ -195,6 +217,8 @@ export class RegressionRunner {
       stepType: "ASSERTION",
       stepId: assertion.id,
       stepLabel: assertion.label,
+      stepText: step.rawText,
+      stepKeyword: step.keyword,
       action: definition.assertion,
       stateId: definition.stateId,
       locatorKey: definition.locatorKey,
@@ -211,8 +235,29 @@ export class RegressionRunner {
     return passed(assertion.label, `Element assertion "${definition.assertion}" passed.`, assertion.severity ?? "blocking", this.toHealingInfo(healing));
   }
 
-  private report(stepType: string, id: string, label: string, results: AssertionResult[]): StepReport {
-    return { stepType, id, label, results, allPassed: results.filter((result) => result.severity === "blocking").every((result) => result.passed) };
+  private report(stepType: string, id: string, label: string, results: AssertionResult[], step: RuntimeStepPlan): StepReport {
+    return {
+      stepType,
+      id,
+      label,
+      stepText: step.rawText,
+      stepKeyword: step.keyword,
+      results,
+      allPassed: results.filter((result) => result.severity === "blocking").every((result) => result.passed),
+    };
+  }
+
+  private withBddStep(result: AssertionResult, step: RuntimeStepPlan, label?: string): AssertionResult {
+    return {
+      ...result,
+      bddStep: {
+        type: step.type,
+        id: step.id,
+        label,
+        keyword: step.keyword,
+        text: step.rawText,
+      },
+    };
   }
 
   private async emitResults(report: StepReport): Promise<void> {
@@ -239,7 +284,7 @@ export class RegressionRunner {
       totals: {
         passed: results.filter((result) => result.passed).length,
         failed: results.filter((result) => !result.passed && result.severity === "blocking").length,
-        warnings: results.filter((result) => !result.passed && result.severity !== "blocking").length,
+        warnings: results.filter((result) => result.healingInfo?.wasHealed || (!result.passed && result.severity !== "blocking")).length,
       },
       reports,
     };
@@ -273,10 +318,9 @@ export class RegressionRunner {
   }
 
   private async log(message: string, level: "info" | "warning" | "error" = "info"): Promise<void> {
-    const line = `[CoverIt] ${message}`;
-    if (level === "error") console.error(line);
-    else if (level === "warning") console.warn(line);
-    else console.log(line);
-    await this.reporter.log(line, level);
+    if (level === "error") this.logger.error("Runner", message);
+    else if (level === "warning") this.logger.warn("Runner", message);
+    else this.logger.info("Runner", message);
+    await this.reporter.log(message, level);
   }
 }

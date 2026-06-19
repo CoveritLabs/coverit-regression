@@ -2,39 +2,136 @@ import { getCoveritRunId, loadCoveritConfig } from "@/config/coveritConfig";
 import { CoveritApiClient } from "@/reporting/coveritApiClient";
 import { LocalArtifactStore } from "@/reporting/localArtifactStore";
 import { AssertionResult, RegressionEvent, RunIdentity, RunSummary, ScenarioStatus, StepReport, StepStatus } from "@/types";
+import { getArtifactPaths } from "@/utils/artifactPaths";
+import { logger, Logger } from "@/utils/logger";
+import type { Page } from "@playwright/test";
 
 export class RunReporter {
+  private static readonly warnedApiDisabledReasons = new Set<string>();
+  private static readonly uploadedArtifactPaths = new Set<string>();
+  private static readonly scenarioArtifactMappings = new Map<string, { featureName?: string; scenarioName?: string; scenarioArtifactName: string }>();
   private readonly apiClient?: CoveritApiClient;
   private readonly artifactStore?: LocalArtifactStore;
   private readonly identity: RunIdentity;
+  private readonly logger: Logger;
+  private scenarioStartedAt?: string;
 
   constructor(identity: Partial<RunIdentity> = {}, config = loadCoveritConfig()) {
     const runId = identity.runId ?? getCoveritRunId();
+    logger.configure({ logFilePath: getArtifactPaths(config, runId).runLog });
     this.apiClient = config.api.enabled ? new CoveritApiClient(config) : undefined;
     this.artifactStore = config.reporting.localArtifactsEnabled ? new LocalArtifactStore(config, runId) : undefined;
+    const scenarioLogPath = this.artifactStore && identity.scenarioName ? this.artifactStore.getScenarioLogPath({
+      scenarioName: identity.scenarioName,
+      scenarioIndex: identity.scenarioIndex,
+      scenarioArtifactName: identity.scenarioArtifactName,
+    }) : undefined;
+    this.logger = logger.forScenario({ logFilePath: scenarioLogPath });
+    if (config.reporting.apiDisabledReason && !RunReporter.warnedApiDisabledReasons.has(config.reporting.apiDisabledReason)) {
+      RunReporter.warnedApiDisabledReasons.add(config.reporting.apiDisabledReason);
+      logger.warn("CoverIt API", config.reporting.apiDisabledReason);
+    }
     this.identity = {
       runId,
+      runName: config.run.name,
       applicationId: config.run.applicationId,
       ...(config.run.versionId ? { versionId: config.run.versionId } : {}),
       ...identity,
     };
+    if (this.identity.scenarioName) {
+      RunReporter.scenarioArtifactMappings.set(`${this.identity.featureName ?? ""}::${this.identity.scenarioName}::${this.identity.scenarioIndex ?? ""}`, {
+        featureName: this.identity.featureName,
+        scenarioName: this.identity.scenarioName,
+        scenarioArtifactName: this.identity.scenarioArtifactName ?? this.identity.scenarioName,
+      });
+    }
   }
 
-  async scenarioStatus(status: ScenarioStatus): Promise<void> {
-    await this.event("scenario.status", { status });
+  async scenarioStatus(status: ScenarioStatus, context: { designClassId?: string; designClassStep?: { keyword?: string; rawText?: string } } = {}): Promise<void> {
+    const timestamp = new Date().toISOString();
+    if (status === "running" || !this.scenarioStartedAt) this.scenarioStartedAt = timestamp;
+    const timing = status === "running"
+      ? { startedAt: this.scenarioStartedAt }
+      : {
+        startedAt: this.scenarioStartedAt,
+        finishedAt: timestamp,
+        durationMs: Math.max(0, new Date(timestamp).getTime() - new Date(this.scenarioStartedAt).getTime()),
+      };
+    const designClassPayload = context.designClassId ? {
+      designClassId: context.designClassId,
+      ...(context.designClassStep ? {
+        designClassStepText: context.designClassStep.rawText,
+        designClassStepKeyword: context.designClassStep.keyword,
+        bddStep: {
+          type: "DESIGN_CLASS",
+          id: context.designClassId,
+          keyword: context.designClassStep.keyword,
+          text: context.designClassStep.rawText,
+        },
+      } : {}),
+    } : {};
+    this.artifactStore?.saveScenarioInfo({
+      featureName: this.identity.featureName,
+      scenarioName: this.identity.scenarioName,
+      scenarioIndex: this.identity.scenarioIndex,
+      scenarioArtifactName: this.identity.scenarioArtifactName,
+      status,
+      ...timing,
+    });
+    await this.event("scenario.status", { status, ...timing, ...designClassPayload });
   }
 
-  async stepStatus(report: Pick<StepReport, "id" | "label" | "stepType">, status: StepStatus): Promise<void> {
-    await this.event("step.status", { status, stepId: report.id, stepLabel: report.label, stepType: report.stepType });
+  async stepStatus(report: Pick<StepReport, "id" | "label" | "stepType" | "stepText" | "stepKeyword">, status: StepStatus): Promise<void> {
+    await this.event("step.status", {
+      status,
+      stepId: report.id,
+      stepLabel: report.label,
+      stepType: report.stepType,
+      stepText: report.stepText,
+      stepKeyword: report.stepKeyword,
+      bddStep: {
+        type: report.stepType,
+        id: report.id,
+        label: report.label,
+        keyword: report.stepKeyword,
+        text: report.stepText,
+      },
+    });
   }
 
-  async assertionResult(report: Pick<StepReport, "id" | "label" | "stepType">, result: AssertionResult): Promise<void> {
-    await this.event("assertion.result", { stepId: report.id, stepLabel: report.label, stepType: report.stepType, result });
+  async assertionResult(report: Pick<StepReport, "id" | "label" | "stepType" | "stepText" | "stepKeyword">, result: AssertionResult): Promise<void> {
+    const bddStep = result.bddStep ?? {
+      type: report.stepType,
+      id: report.id,
+      label: report.label,
+      keyword: report.stepKeyword,
+      text: report.stepText,
+    };
+    await this.event("assertion.result", {
+      stepId: bddStep.id,
+      stepLabel: bddStep.label ?? report.label,
+      stepType: bddStep.type,
+      stepText: bddStep.text,
+      stepKeyword: bddStep.keyword,
+      parentStepId: report.id,
+      parentStepLabel: report.label,
+      parentStepType: report.stepType,
+      parentStepText: report.stepText,
+      parentStepKeyword: report.stepKeyword,
+      bddStep,
+      result,
+    });
     if (!result.passed && result.severity === "blocking") await this.failure({ report, result });
   }
 
   async log(message: string, level: "info" | "warning" | "error" = "info"): Promise<void> {
-    this.artifactStore?.appendLog(`[${level.toUpperCase()}] ${message}`);
+    if (this.identity.scenarioName || this.identity.scenarioArtifactName || this.identity.scenarioIndex) this.artifactStore?.appendScenarioLog({
+      scenarioName: this.identity.scenarioName,
+      scenarioIndex: this.identity.scenarioIndex,
+      scenarioArtifactName: this.identity.scenarioArtifactName,
+      level,
+      message,
+    });
     await this.event("log", { level, message });
   }
 
@@ -46,6 +143,47 @@ export class RunReporter {
   async saveSummary(summary: RunSummary): Promise<void> {
     this.artifactStore?.saveSummary(summary);
     await this.sendCompletion(summary);
+  }
+
+  async captureFailureArtifacts(page: Page, error: unknown): Promise<void> {
+    if (!this.artifactStore) return;
+    await this.artifactStore.savePlaywrightFailureArtifacts({
+      featureName: this.identity.featureName,
+      scenarioName: this.identity.scenarioName,
+      scenarioIndex: this.identity.scenarioIndex,
+      scenarioArtifactName: this.identity.scenarioArtifactName,
+      error: error instanceof Error ? error : new Error(String(error)),
+      screenshot: () => page.screenshot({ fullPage: true }),
+    });
+  }
+
+  async uploadArtifacts(scope: "all" | "run" | "scenario" = "all", options: { maxDurationMs?: number } = {}): Promise<void> {
+    if (!this.apiClient || !this.artifactStore) return;
+    const artifacts = this.artifactStore.listArtifacts(scope, this.identity.scenarioIndex, this.identity.scenarioArtifactName, [...RunReporter.scenarioArtifactMappings.values()]);
+    if (artifacts.length === 0) return;
+
+    const startedAt = Date.now();
+    const maxDurationMs = options.maxDurationMs ?? 25_000;
+    let uploaded = 0;
+    let failed = 0;
+    let skipped = 0;
+    for (const artifact of artifacts) {
+      const uploadKey = `${this.identity.runId}:${artifact.relativePath}`;
+      if (RunReporter.uploadedArtifactPaths.has(uploadKey)) continue;
+      if (Date.now() - startedAt > maxDurationMs) {
+        skipped += 1;
+        continue;
+      }
+      try {
+        await this.apiClient.uploadArtifact(this.identity, artifact);
+        RunReporter.uploadedArtifactPaths.add(uploadKey);
+        uploaded += 1;
+      } catch (error) {
+        failed += 1;
+        this.logger.warn("Artifacts", `Could not upload "${artifact.relativePath}". ${(error as Error).message}`);
+      }
+    }
+    if (uploaded > 0 || failed > 0 || skipped > 0) this.logger.info("Artifacts", `Discovered ${artifacts.length} artifact(s); uploaded ${uploaded}; failed ${failed}; skipped ${skipped}.`);
   }
 
   private async event(type: string, payload: unknown): Promise<void> {
@@ -65,7 +203,7 @@ export class RunReporter {
     try {
       await this.apiClient.sendEvent(event);
     } catch (error) {
-      console.warn(`[CoverIt] Failed to send regression event "${event.type}" to API: ${(error as Error).message}`);
+      this.logger.warn("CoverIt API", `Could not send regression event "${event.type}". ${(error as Error).message}`);
     }
   }
 
@@ -74,7 +212,7 @@ export class RunReporter {
     try {
       await this.apiClient.completeRun(this.identity, summary);
     } catch (error) {
-      console.warn(`[CoverIt] Failed to send regression run completion to API: ${(error as Error).message}`);
+      this.logger.warn("CoverIt API", `Could not send run completion. ${(error as Error).message}`);
     }
   }
 }

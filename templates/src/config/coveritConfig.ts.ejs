@@ -19,25 +19,40 @@ export function loadCoveritConfig(configPath = "coverit.config.json"): CoveritCo
 export function getCoveritRunId(): string {
   const existing = process.env.COVERIT_RUN_ID;
   if (existing) return existing;
-  const generated = `local-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const generated = `run-${timestamp}-${suffix}`;
   process.env.COVERIT_RUN_ID = generated;
   return generated;
 }
 
 function resolveConfig(config: CoveritConfig): CoveritConfig {
   if (!config.application?.baseUrl) throw new Error("coverit.config.json must define application.baseUrl.");
-  if (!config.run?.applicationId) throw new Error("coverit.config.json must define run.applicationId.");
   if (!config.api) throw new Error("coverit.config.json must define api settings.");
   if (!config.reporting) throw new Error("coverit.config.json must define reporting settings.");
   if (!config.reporting.artifactRoot) throw new Error("coverit.config.json must define reporting.artifactRoot.");
   if (!config.healing) throw new Error("coverit.config.json must define healing settings.");
-  if (config.api.enabled) {
-    if (!config.api.baseUrl) throw new Error("coverit.config.json must define api.baseUrl when api.enabled is true.");
-    if (!config.api.apiKey) throw new Error("coverit.config.json must define api.apiKey when api.enabled is true.");
-  }
+  const apiDisabledReason = apiDisabledReasonFor(config);
+  const apiEnabled = Boolean(config.api.enabled && !apiDisabledReason);
+  const baseUrl = config.api.baseUrl ? config.api.baseUrl.replace(/\/+$/, "") : "";
   return {
     ...config,
-    run: { ...config.run, versionId: config.run.versionId || undefined },
-    api: { ...config.api, baseUrl: config.api.baseUrl.replace(/\/+$/, "") },
+    run: { ...config.run, name: config.run?.name?.trim() || "Run", applicationId: config.run?.applicationId || "", versionId: config.run?.versionId || undefined },
+    api: { ...config.api, enabled: apiEnabled, baseUrl },
+    reporting: { ...config.reporting, apiDisabledReason },
   };
+}
+
+function apiDisabledReasonFor(config: CoveritConfig): string | undefined {
+  if (!config.api?.enabled) return undefined;
+  if (!config.run?.applicationId) {
+    return "API reporting disabled: coverit.config.json is missing run.applicationId. Set it to the target application id from CoverIt.";
+  }
+  if (!config.api.baseUrl) {
+    return "API reporting disabled: coverit.config.json is missing api.baseUrl.";
+  }
+  if (!config.api.apiKey) {
+    return "API reporting disabled: coverit.config.json is missing api.apiKey. Rotate or copy the target application API key from CoverIt.";
+  }
+  return undefined;
 }

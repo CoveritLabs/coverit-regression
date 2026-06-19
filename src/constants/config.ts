@@ -5,6 +5,7 @@
 import { PATHS } from "@constants/paths";
 
 export const CLI_DEFAULTS = {
+  inputPath: PATHS.INPUT,
   outputPath: PATHS.OUTPUT,
   dryRun: false,
   check: false,

@@ -11,6 +11,7 @@ const logFormat = printf(({ level, message, timestamp }) => {
 });
 
 const currentLogLevel = process.env.LOG_LEVEL || "info";
+const configuredFileLogPaths = new Set<string>();
 
 export const logger = winston.createLogger({
   level: currentLogLevel,
@@ -28,6 +29,10 @@ export function setupLogger(options: { logToFile?: boolean; logPath?: string }) 
 
   if (options.logToFile) {
     const filename = options.logPath || "combined.log";
+    if (configuredFileLogPaths.has(filename)) {
+      logger.info(`File logging already initialized at: ${filename}`);
+      return;
+    }
 
     logger.add(
       new winston.transports.File({
@@ -35,6 +40,7 @@ export function setupLogger(options: { logToFile?: boolean; logPath?: string }) 
         level: currentLogLevel,
       }),
     );
+    configuredFileLogPaths.add(filename);
 
     logger.info(`File logging initialized at: ${filename}`);
   }
