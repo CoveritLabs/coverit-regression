@@ -70,13 +70,15 @@ export class RunReporter {
         },
       } : {}),
     } : {};
-    this.artifactStore?.saveScenarioInfo({
-      featureName: this.identity.featureName,
-      scenarioName: this.identity.scenarioName,
-      scenarioIndex: this.identity.scenarioIndex,
-      scenarioArtifactName: this.identity.scenarioArtifactName,
-      status,
-      ...timing,
+    this.safeLocalArtifact("save scenario info", () => {
+      this.artifactStore?.saveScenarioInfo({
+        featureName: this.identity.featureName,
+        scenarioName: this.identity.scenarioName,
+        scenarioIndex: this.identity.scenarioIndex,
+        scenarioArtifactName: this.identity.scenarioArtifactName,
+        status,
+        ...timing,
+      });
     });
     await this.event("scenario.status", { status, ...timing, ...designClassPayload });
   }
@@ -125,41 +127,53 @@ export class RunReporter {
   }
 
   async log(message: string, level: "info" | "warning" | "error" = "info"): Promise<void> {
-    if (this.identity.scenarioName || this.identity.scenarioArtifactName || this.identity.scenarioIndex) this.artifactStore?.appendScenarioLog({
-      scenarioName: this.identity.scenarioName,
-      scenarioIndex: this.identity.scenarioIndex,
-      scenarioArtifactName: this.identity.scenarioArtifactName,
-      level,
-      message,
+    if (this.identity.scenarioName || this.identity.scenarioArtifactName || this.identity.scenarioIndex) this.safeLocalArtifact("append scenario log", () => {
+      this.artifactStore?.appendScenarioLog({
+        scenarioName: this.identity.scenarioName,
+        scenarioIndex: this.identity.scenarioIndex,
+        scenarioArtifactName: this.identity.scenarioArtifactName,
+        level,
+        message,
+      });
     });
     await this.event("log", { level, message });
   }
 
   async failure(failure: unknown): Promise<void> {
-    this.artifactStore?.saveFailure(failure);
+    this.safeLocalArtifact("save failure", () => this.artifactStore?.saveFailure(failure));
     await this.event("failure", failure);
   }
 
   async saveSummary(summary: RunSummary): Promise<void> {
-    this.artifactStore?.saveSummary(summary);
+    this.safeLocalArtifact("save summary", () => this.artifactStore?.saveSummary(summary));
     await this.sendCompletion(summary);
   }
 
   async captureFailureArtifacts(page: Page, error: unknown): Promise<void> {
     if (!this.artifactStore) return;
-    await this.artifactStore.savePlaywrightFailureArtifacts({
-      featureName: this.identity.featureName,
-      scenarioName: this.identity.scenarioName,
-      scenarioIndex: this.identity.scenarioIndex,
-      scenarioArtifactName: this.identity.scenarioArtifactName,
-      error: error instanceof Error ? error : new Error(String(error)),
-      screenshot: () => page.screenshot({ fullPage: true }),
-    });
+    try {
+      await this.artifactStore.savePlaywrightFailureArtifacts({
+        featureName: this.identity.featureName,
+        scenarioName: this.identity.scenarioName,
+        scenarioIndex: this.identity.scenarioIndex,
+        scenarioArtifactName: this.identity.scenarioArtifactName,
+        error: error instanceof Error ? error : new Error(String(error)),
+        screenshot: () => page.screenshot({ fullPage: true }),
+      });
+    } catch (artifactError) {
+      this.logger.warn("Artifacts", `Could not capture failure artifacts. ${(artifactError as Error).message}`);
+    }
   }
 
   async uploadArtifacts(scope: "all" | "run" | "scenario" = "all", options: { maxDurationMs?: number } = {}): Promise<void> {
     if (!this.apiClient || !this.artifactStore) return;
-    const artifacts = this.artifactStore.listArtifacts(scope, this.identity.scenarioIndex, this.identity.scenarioArtifactName, [...RunReporter.scenarioArtifactMappings.values()]);
+    let artifacts: ReturnType<LocalArtifactStore["listArtifacts"]> = [];
+    try {
+      artifacts = this.artifactStore.listArtifacts(scope, this.identity.scenarioIndex, this.identity.scenarioArtifactName, [...RunReporter.scenarioArtifactMappings.values()]);
+    } catch (error) {
+      this.logger.warn("Artifacts", `Could not list artifacts for upload. ${(error as Error).message}`);
+      return;
+    }
     if (artifacts.length === 0) return;
 
     const startedAt = Date.now();
@@ -194,7 +208,7 @@ export class RunReporter {
       ...this.identity,
       payload,
     };
-    this.artifactStore?.appendEvent(event);
+    this.safeLocalArtifact("append event", () => this.artifactStore?.appendEvent(event));
     await this.sendEvent(event);
   }
 
@@ -213,6 +227,14 @@ export class RunReporter {
       await this.apiClient.completeRun(this.identity, summary);
     } catch (error) {
       this.logger.warn("CoverIt API", `Could not send run completion. ${(error as Error).message}`);
+    }
+  }
+
+  private safeLocalArtifact(operation: string, action: () => void): void {
+    try {
+      action();
+    } catch (error) {
+      this.logger.warn("Artifacts", `Could not ${operation}. ${(error as Error).message}`);
     }
   }
 }

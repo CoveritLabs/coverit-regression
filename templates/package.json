@@ -5,6 +5,8 @@
   "type": "commonjs",
   "scripts": {
     "test": "playwright test",
+    "test:filtered": "playwright test",
+    "ci:added-flows": "node scripts/detect-added-flows.js",
     "test:headed": "playwright test --headed",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "report": "node -e \"const fs=require('fs'),path=require('path');const root='artifacts';const runs=fs.existsSync(root)?fs.readdirSync(root).map(name=>({name,time:fs.statSync(path.join(root,name)).mtimeMs})).sort((a,b)=>b.time-a.time):[];if(!runs[0]){console.error('No CoverIt artifact runs found.');process.exit(1)};require('child_process').spawnSync('npx',['playwright','show-report',path.join(root,runs[0].name,'playwright','report')],{stdio:'inherit',shell:true});\""

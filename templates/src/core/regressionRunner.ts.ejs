@@ -34,10 +34,8 @@ export class RegressionRunner {
   async runScenario(scenario: RuntimeScenarioPlan): Promise<void> {
     this.startedAt = new Date().toISOString();
     const reports: StepReport[] = [];
-
-    if (scenario.designClassId && scenario.designClassId !== DESIGN_CLASS_INFO.id) {
-      throw new Error(`Unknown design class "${scenario.designClassId}". Expected "${DESIGN_CLASS_INFO.id}".`);
-    }
+    let status: RunSummary["status"] = "passed";
+    let scenarioError: unknown;
 
     this.logger.info("Scenario", `Feature: ${this.featureName ?? "n/a"} | Scenario: ${scenario.name}`);
     await this.reporter.scenarioStatus("running", {
@@ -46,6 +44,10 @@ export class RegressionRunner {
     });
     await this.log(`SCENARIO START: ${scenario.name}`);
     try {
+      if (scenario.designClassId && scenario.designClassId !== DESIGN_CLASS_INFO.id) {
+        throw new Error(`Unknown design class "${scenario.designClassId}". Expected "${DESIGN_CLASS_INFO.id}".`);
+      }
+
       for (const step of scenario.steps) {
         if (step.type === "ASSERTION" || step.type === "ACTION_HOOK") continue;
 
@@ -55,24 +57,22 @@ export class RegressionRunner {
         reports.push(report);
         this.throwOnBlockingFailure(report);
       }
-
-      await this.reporter.scenarioStatus("passed", {
-        designClassId: scenario.designClassId,
-        designClassStep: scenario.designClassStep,
-      });
-      await this.reporter.saveSummary(this.buildSummary("passed", reports));
-      await this.logSummary("passed", reports);
     } catch (error) {
+      status = "failed";
+      scenarioError = error;
       await this.log(`SCENARIO FAILED: ${scenario.name} -> ${(error as Error).message}`, "error");
       await this.reporter.captureFailureArtifacts(this.page, error);
       await this.reporter.failure({ message: (error as Error).message, stack: (error as Error).stack });
-      await this.reporter.scenarioStatus("failed", {
+    } finally {
+      await this.reporter.scenarioStatus(status, {
         designClassId: scenario.designClassId,
         designClassStep: scenario.designClassStep,
       });
-      await this.reporter.saveSummary(this.buildSummary("failed", reports));
-      throw error;
+      await this.reporter.saveSummary(this.buildSummary(status, reports));
+      await this.logSummary(status, reports);
     }
+
+    if (scenarioError) throw scenarioError;
   }
 
   private async runState(step: RuntimeStepPlan, assertions: RuntimeStepPlan[]): Promise<StepReport> {
