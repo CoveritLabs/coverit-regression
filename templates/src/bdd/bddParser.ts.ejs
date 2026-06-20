@@ -8,6 +8,8 @@ export class BddParser {
     const raw = fs.readFileSync(featurePath, "utf8");
     const scenarios: RuntimeScenarioPlan[] = [];
     let featureName = "";
+    let featureMarks: string[] = [];
+    let pendingMarks: string[] = [];
     let currentScenario: RuntimeScenarioPlan | undefined;
     let currentParent: { type: "STATE" | "TRANSITION"; id: string } | undefined;
 
@@ -15,14 +17,26 @@ export class BddParser {
       const line = rawLine.trim();
       if (!line || line.startsWith("#")) continue;
 
+      if (line.startsWith("@")) {
+        pendingMarks.push(...this.extractMarks(line));
+        continue;
+      }
+
       if (line.startsWith("Feature:")) {
         featureName = line.replace("Feature:", "").trim();
+        featureMarks = [...new Set(pendingMarks)];
+        pendingMarks = [];
         continue;
       }
 
       if (line.startsWith("Scenario:") || line.startsWith("Scenario Outline:")) {
         if (currentScenario) scenarios.push(currentScenario);
-        currentScenario = { name: line.replace(/Scenario(?: Outline)?:/, "").trim(), steps: [] };
+        currentScenario = {
+          name: line.replace(/Scenario(?: Outline)?:/, "").trim(),
+          marks: [...new Set([...featureMarks, ...pendingMarks])],
+          steps: [],
+        };
+        pendingMarks = [];
         currentParent = undefined;
         continue;
       }
@@ -84,6 +98,13 @@ export class BddParser {
 
     if (currentScenario) scenarios.push(currentScenario);
     return { name: featureName, filePath: featurePath, scenarios };
+  }
+
+  private extractMarks(line: string): string[] {
+    return line
+      .split(/\s+/)
+      .map((mark) => mark.trim())
+      .filter((mark) => /^@[A-Za-z0-9_-]+$/.test(mark));
   }
 
   private extractKeyword(line: string): BddKeyword | undefined {

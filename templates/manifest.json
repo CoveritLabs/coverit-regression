@@ -69,6 +69,16 @@
       "description": "Generated Playwright regression specs."
     },
     {
+      "path": ".github/workflows/**",
+      "mode": "static",
+      "description": "Generated GitHub Actions regression workflows."
+    },
+    {
+      "path": "scripts/**",
+      "mode": "static",
+      "description": "Generated CI helper scripts."
+    },
+    {
       "path": "package.json",
       "mode": "static",
       "description": "Generated framework package manifest."

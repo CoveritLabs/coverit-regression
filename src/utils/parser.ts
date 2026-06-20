@@ -38,14 +38,17 @@ class Parser {
 
     const workflowOptions: Partial<GitWorkflowOptions> = {
       commitMessage: gitYaml.commitMessage || undefined,
+      commitAuthorName: gitYaml.commitAuthorName || undefined,
+      commitAuthorEmail: gitYaml.commitAuthorEmail || undefined,
     };
 
     const codegenConfig: NonNullable<CodegenConfig> = {
-      prTargetBranch: yamlCodegen.prTargetBranch || "",
+      prTargetBranch: yamlCodegen.prTargetBranch || undefined,
       codegenBranch: yamlCodegen.codegenBranch || undefined,
       prTitle: yamlCodegen.prTitle || undefined,
       prBody: yamlCodegen.prBody || undefined,
       prDraft: yamlCodegen.prDraft || undefined,
+      githubActionsEnabled: yamlCodegen.githubActionsEnabled,
     };
 
     const regressionCodebase: NonNullable<RegressionCodebase> = {
@@ -93,6 +96,12 @@ class Parser {
       } else if (arg === "--commit-message") {
         workflowOptions.commitMessage = this.readValue(argv, ++i, "--commit-message");
         gitWorkflowRequested = true;
+      } else if (arg === "--commit-author-name") {
+        workflowOptions.commitAuthorName = this.readValue(argv, ++i, "--commit-author-name");
+        gitWorkflowRequested = true;
+      } else if (arg === "--commit-author-email") {
+        workflowOptions.commitAuthorEmail = this.readValue(argv, ++i, "--commit-author-email");
+        gitWorkflowRequested = true;
       } else if (arg === "--help" || arg === "-h") {
         this.printHelp();
         process.exit(EXIT_CODE_SUCCESS);
@@ -115,14 +124,14 @@ class Parser {
 
     if (gitWorkflowRequested) {
       if (!regressionCodebase.repositoryUrl) throw new Error("Missing value for --repo-url.");
-      if (!regressionCodebase.apiKey) throw new Error("Missing value for --api-key.");
-      if (!codegenConfig.prTargetBranch) throw new Error("Missing value for --target-branch.");
 
       parsedOptions.gitWorkflowOptions = {
         generatorOptions: parsedOptions.generatorOptions,
         regressionCodebase,
         codegenConfig,
         commitMessage: workflowOptions.commitMessage,
+        commitAuthorName: workflowOptions.commitAuthorName,
+        commitAuthorEmail: workflowOptions.commitAuthorEmail,
       };
     }
 
@@ -145,14 +154,16 @@ Options:
   --check                 Check if the generated files are up to date
   --silent                Disable logging to file
   --repo-url <url>        Enable git workflow mode with the target repository URL
-  --api-key <token>       GitHub HTTPS token used for clone/push/PR creation
+  --api-key <token>       Optional GitHub token used for clone/push/PR creation
   --framework-name <id>   Optional regression framework name
   --codegen-branch <name> Branch to create or reuse for generated changes
-  --target-branch <name>  Base branch to checkout from and open the PR into
+  --target-branch <name>  Optional base branch to checkout from and open the PR into
   --pr-title <text>       Optional pull request title
   --pr-body <text>        Optional pull request body
   --pr-draft              Create the pull request as a draft
   --commit-message <msg>  Optional git commit message override
+  --commit-author-name <name>   Optional git commit author name
+  --commit-author-email <email> Optional git commit author email
   --help, -h              Show this help message
     `);
   }

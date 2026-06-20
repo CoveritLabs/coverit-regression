@@ -1,0 +1,59 @@
+# Copyright (c) 2026 CoverIt Labs. All Rights Reserved.
+# Proprietary and confidential. Unauthorized use is strictly prohibited.
+# See LICENSE file in the project root for full license information.
+
+name: CoverIt Regression
+
+on:
+  workflow_dispatch:
+    inputs:
+      featureRegex:
+        description: Feature name or feature file regex
+        required: false
+        type: string
+      scenarioRegex:
+        description: Scenario name regex
+        required: false
+        type: string
+      marks:
+        description: Comma-separated marks, for example @checkout,@smoke
+        required: false
+        type: string
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  added-flows:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: './package.json'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps
+
+      - name: Run manual filters
+        if: github.event_name == 'workflow_dispatch' && (inputs.featureRegex != '' || inputs.scenarioRegex != '' || inputs.marks != '')
+        run: npm run test:filtered
+        env:
+          FEATURE_REGEX: ${{ inputs.featureRegex }}
+          SCENARIO_REGEX: ${{ inputs.scenarioRegex }}
+          MARKS: ${{ inputs.marks }}
+
+      - name: Run added flows
+        if: github.event_name != 'workflow_dispatch' || (inputs.featureRegex == '' && inputs.scenarioRegex == '' && inputs.marks == '')
+        run: npm run ci:added-flows
+        env:
+          COVERIT_BASE_REF: ${{ github.base_ref || github.ref_name }}

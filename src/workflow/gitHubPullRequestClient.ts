@@ -23,10 +23,7 @@ class GitHubPullRequestClient {
 
   async createPullRequest(request: PullRequestRequest): Promise<PullRequestResponse> {
     const repository = this.parseRepository(request.repositoryUrl);
-
-    const cleanHeadBranch = request.headBranch.includes(":")
-      ? request.headBranch.split(":").pop()!
-      : request.headBranch;
+    const cleanHeadBranch = this.cleanBranchName(request.headBranch);
 
     await this.waitForBranchRef(repository.owner, repository.repo, cleanHeadBranch, request.apiKey);
 
@@ -35,12 +32,7 @@ class GitHubPullRequestClient {
 
     const response = await this.fetchImpl(apiUrl, {
       method: "POST",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${request.apiKey}`,
-        "Content-Type": "application/json",
-        "User-Agent": "coverit-regression-generator",
-      },
+      headers: this.headers(request.apiKey, true),
       body: JSON.stringify({
         title: request.title,
         body: request.body,
@@ -66,7 +58,87 @@ class GitHubPullRequestClient {
     };
   }
 
-  private async waitForBranchRef(owner: string, repo: string, branch: string, apiKey: string): Promise<void> {
+  async upsertPullRequest(request: PullRequestRequest): Promise<PullRequestResponse> {
+    const repository = this.parseRepository(request.repositoryUrl);
+    const cleanHeadBranch = this.cleanBranchName(request.headBranch);
+    const existing = await this.findOpenPullRequest(request);
+    if (existing) {
+      logger.info(`[Git Workflow] Updating existing pull request #${existing.number} for branch "${cleanHeadBranch}".`);
+      return this.updatePullRequest(request, existing.number);
+    }
+
+    return this.createPullRequest({
+      ...request,
+      headBranch: cleanHeadBranch,
+      repositoryUrl: `https://github.com/${repository.owner}/${repository.repo}.git`,
+    });
+  }
+
+  async findOpenPullRequest(request: PullRequestRequest): Promise<PullRequestResponse | undefined> {
+    const repository = this.parseRepository(request.repositoryUrl);
+    const cleanHeadBranch = this.cleanBranchName(request.headBranch);
+    const params = new URLSearchParams({
+      state: "open",
+      head: `${repository.owner}:${cleanHeadBranch}`,
+      base: request.baseBranch,
+      per_page: "1",
+    });
+    const apiUrl = `https://api.github.com/repos/${repository.owner}/${repository.repo}/pulls?${params.toString()}`;
+
+    const response = await this.fetchImpl(apiUrl, {
+      method: "GET",
+      headers: this.headers(request.apiKey),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`[Git Workflow] Failed to find pull requests (${response.status}): ${errorBody}`);
+    }
+
+    const payload = (await response.json()) as Array<{ html_url?: string; number?: number }>;
+    const pullRequest = payload[0];
+    if (!pullRequest) return undefined;
+    if (!pullRequest.html_url || typeof pullRequest.number !== "number") {
+      throw new Error("[Git Workflow] GitHub pull request search response did not include expected fields.");
+    }
+
+    return {
+      url: pullRequest.html_url,
+      number: pullRequest.number,
+    };
+  }
+
+  async updatePullRequest(request: PullRequestRequest, pullRequestNumber: number): Promise<PullRequestResponse> {
+    const repository = this.parseRepository(request.repositoryUrl);
+    const apiUrl = `https://api.github.com/repos/${repository.owner}/${repository.repo}/pulls/${pullRequestNumber}`;
+
+    const response = await this.fetchImpl(apiUrl, {
+      method: "PATCH",
+      headers: this.headers(request.apiKey, true),
+      body: JSON.stringify({
+        title: request.title,
+        body: request.body,
+        base: request.baseBranch,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`[Git Workflow] Failed to update pull request (${response.status}): ${errorBody}`);
+    }
+
+    const payload = (await response.json()) as { html_url?: string; number?: number };
+    if (!payload.html_url || typeof payload.number !== "number") {
+      throw new Error("[Git Workflow] GitHub pull request update response did not include expected fields.");
+    }
+
+    return {
+      url: payload.html_url,
+      number: payload.number,
+    };
+  }
+
+  private async waitForBranchRef(owner: string, repo: string, branch: string, apiKey: string | undefined): Promise<void> {
     const refUrl = `https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${branch}`;
     const maxRetries = 5;
     let delayMs = 2000;
@@ -78,11 +150,7 @@ class GitHubPullRequestClient {
 
       const response = await this.fetchImpl(refUrl, {
         method: "GET",
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${apiKey}`,
-          "User-Agent": "coverit-regression-generator",
-        },
+        headers: this.headers(apiKey),
       });
 
       if (response.ok) {
@@ -111,6 +179,19 @@ class GitHubPullRequestClient {
     return {
       owner: httpsMatch[1],
       repo: httpsMatch[2],
+    };
+  }
+
+  private cleanBranchName(branchName: string): string {
+    return branchName.includes(":") ? branchName.split(":").pop()! : branchName;
+  }
+
+  private headers(apiKey: string | undefined, hasBody: boolean = false): Record<string, string> {
+    return {
+      Accept: "application/vnd.github+json",
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      ...(hasBody ? { "Content-Type": "application/json" } : {}),
+      "User-Agent": "coverit-regression-generator",
     };
   }
 }

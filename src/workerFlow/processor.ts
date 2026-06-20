@@ -52,7 +52,7 @@ export async function processBddOutputJob(
 
   const materializedInput = await (dependencies.materializeInput ?? materializeBddInput)(payload, { jobId: job.jobId });
   const context = await dependencies.sessionRepository.findCodegenContext(payload.session_id);
-  const options = (dependencies.buildOptions ?? buildWorkerCliOptions)(context, materializedInput);
+  const options = (dependencies.buildOptions ?? buildWorkerCliOptions)(context, materializedInput, PATHS.ROOT);
 
   configureLogger(dependencies, options);
 

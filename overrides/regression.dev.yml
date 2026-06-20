@@ -1,0 +1,22 @@
+# Copyright (c) 2026 CoverIt Labs. All Rights Reserved.
+# Proprietary and confidential. Unauthorized use is strictly prohibited.
+# See LICENSE file in the project root for full license information.
+
+# Modular override for regression-worker development from the local repo.
+# Rebuild once after Dockerfile.dev changes; mounted source/template changes then restart the worker automatically.
+
+services:
+  regression-worker:
+    image: coverit-regression-dev-local
+    build:
+      context: ${REGRESSION_DIR}
+      dockerfile: Dockerfile.dev
+    pull_policy: build
+    volumes:
+      - ${REGRESSION_DIR}/src:/app/src
+      - ${REGRESSION_DIR}/templates:/app/templates
+      - ${REGRESSION_DIR}/config.yaml:/app/config.yaml
+      - ${REGRESSION_DIR}/tsconfig.json:/app/tsconfig.json
+      - ${REGRESSION_DIR}/logs:/app/logs
+      - ${REGRESSION_DIR}/output:/app/output
+      - ${REGRESSION_DIR}/tmp:/app/tmp

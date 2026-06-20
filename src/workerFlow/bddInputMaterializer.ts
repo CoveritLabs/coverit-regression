@@ -4,6 +4,7 @@
 
 import { randomUUID } from "crypto";
 import fs from "fs/promises";
+import os from "os";
 import path from "path";
 
 import { PATHS } from "@constants/paths";
@@ -25,11 +26,11 @@ export async function materializeBddInput(
   payload: BddOutputPayload,
   options: { jobId?: string; baseDir?: string } = {},
 ): Promise<MaterializedBddInput> {
-  const baseDir = options.baseDir ?? path.join(PATHS.ROOT, "tmp");
+  const baseDir = options.baseDir ?? (await resolveWritableTmpDir());
   await fs.mkdir(baseDir, { recursive: true });
 
   const uniquePart = sanitizePathSegment(options.jobId || payload.session_id || randomUUID());
-  const jobRootPath = path.join(baseDir, `job-input-${uniquePart}-${Date.now()}`);
+  const jobRootPath = path.join(baseDir, `generated-${uniquePart}-${Date.now()}`);
   const inputPath = path.join(jobRootPath, "input");
   const featuresPath = path.join(inputPath, "features");
   const mappingPath = path.join(inputPath, "framework-mapping");
@@ -64,4 +65,32 @@ function sanitizePathSegment(value: string): string {
 
 async function writeJson(filePath: string, value: unknown): Promise<void> {
   await fs.writeFile(filePath, JSON.stringify(value, null, 2), "utf8");
+}
+
+export async function resolveWritableTmpDir(
+  primaryPath: string = PATHS.TMP,
+  fallbackPath: string = path.join(os.tmpdir(), "coverit-regression"),
+  assertWritable: (directoryPath: string) => Promise<void> = assertWritableDirectory,
+): Promise<string> {
+  try {
+    await fs.mkdir(primaryPath, { recursive: true });
+    await assertWritable(primaryPath);
+    return primaryPath;
+  } catch (error) {
+    if (!isPermissionError(error)) throw error;
+    await fs.mkdir(fallbackPath, { recursive: true });
+    await assertWritable(fallbackPath);
+    return fallbackPath;
+  }
+}
+
+async function assertWritableDirectory(directoryPath: string): Promise<void> {
+  const probePath = path.join(directoryPath, `.coverit-write-probe-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  await fs.mkdir(probePath);
+  await fs.rm(probePath, { recursive: true, force: true });
+}
+
+function isPermissionError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "EACCES" || code === "EPERM" || code === "EROFS";
 }
