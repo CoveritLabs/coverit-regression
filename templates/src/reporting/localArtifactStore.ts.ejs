@@ -1,0 +1,178 @@
+import fs from "fs";
+import path from "path";
+
+import { CoveritConfig } from "@/types";
+import { RegressionArtifactFile, RegressionArtifactKind } from "@/types";
+import { getArtifactPaths, getPlaywrightScenarioDir, getPlaywrightScenarioLogPath, sanitizeArtifactFolderName, toRelativeArtifactPath } from "@/utils/artifactPaths";
+
+type ScenarioArtifactMapping = { featureName?: string; scenarioName?: string; scenarioArtifactName: string };
+
+export class LocalArtifactStore {
+  private readonly paths: ReturnType<typeof getArtifactPaths>;
+
+  constructor(config: CoveritConfig, runId: string) {
+    this.paths = getArtifactPaths(config, runId);
+  }
+
+  appendEvent(event: unknown): void {
+    this.append(this.paths.events, `${JSON.stringify(event)}\n`);
+  }
+
+  saveFailure(failure: unknown): void {
+    this.append(this.paths.failures, `## ${new Date().toISOString()}\n\n\`\`\`json\n${JSON.stringify(failure, null, 2)}\n\`\`\`\n\n`);
+  }
+
+  saveSummary(summary: unknown): void {
+    this.write(this.paths.summary, JSON.stringify(summary, null, 2));
+  }
+
+  saveScenarioInfo(_input: { featureName?: string; scenarioName?: string; scenarioIndex?: number; scenarioArtifactName?: string; status: string; startedAt?: string; finishedAt?: string }): void {
+    return;
+  }
+
+  getScenarioLogPath(input: { scenarioName?: string; scenarioIndex?: number; scenarioArtifactName?: string }): string {
+    return getPlaywrightScenarioLogPath(this.paths, input.scenarioArtifactName, input.scenarioName, input.scenarioIndex);
+  }
+
+  appendScenarioLog(input: { scenarioName?: string; scenarioIndex?: number; scenarioArtifactName?: string; level: string; message: string }): void {
+    const timestamp = new Date().toISOString();
+    const level = input.level.toUpperCase().padEnd(7, " ").slice(0, 7);
+    this.append(this.getScenarioLogPath(input), `${timestamp} ${level} ${input.message}\n`);
+  }
+
+  async savePlaywrightFailureArtifacts(input: { featureName?: string; scenarioName?: string; scenarioIndex?: number; scenarioArtifactName?: string; error: Error; screenshot?: () => Promise<Buffer> }): Promise<void> {
+    const scenarioDir = getPlaywrightScenarioDir(this.paths, input.scenarioArtifactName, input.scenarioName, input.scenarioIndex);
+    this.write(path.join(scenarioDir, "error.md"), `# ${input.scenarioName ?? "Scenario failure"}\n\n- Feature: ${input.featureName ?? "n/a"}\n- Time: ${new Date().toISOString()}\n\n## Error\n\n\`\`\`text\n${input.error.stack ?? input.error.message}\n\`\`\`\n`);
+    if (!input.screenshot) return;
+    try {
+      const screenshot = await input.screenshot();
+      this.writeBuffer(path.join(scenarioDir, "screenshot.png"), screenshot);
+    } catch {
+      // Failure artifact capture should never mask the original test failure.
+    }
+  }
+
+  listArtifacts(scope: "all" | "run" | "scenario" = "all", scenarioIndex?: number, scenarioArtifactName?: string, scenarioMappings: ScenarioArtifactMapping[] = []): RegressionArtifactFile[] {
+    if (!fs.existsSync(this.paths.runRoot)) return [];
+    return this.walk(this.paths.runRoot)
+      .filter((absolutePath) => this.isInScope(absolutePath, scope, scenarioIndex, scenarioArtifactName))
+      .filter((absolutePath) => isUploadCandidate(toRelativeArtifactPath(this.paths, absolutePath)))
+      .map((absolutePath) => {
+      const physicalRelativePath = toRelativeArtifactPath(this.paths, absolutePath);
+      const relativePath = scope === "run" ? canonicalizeRunArtifactPath(physicalRelativePath, scenarioMappings) : physicalRelativePath;
+      const scenarioArtifactName = getScenarioArtifactName(relativePath);
+      return {
+        absolutePath,
+        relativePath,
+        name: path.basename(absolutePath),
+        kind: inferArtifactKind(relativePath),
+        contentType: inferContentType(relativePath),
+        ...(scenarioArtifactName ? { scenarioArtifactName } : {}),
+      };
+    });
+  }
+
+  private isInScope(absolutePath: string, scope: "all" | "run" | "scenario", scenarioIndex?: number, scenarioArtifactName?: string): boolean {
+    if (scope === "all") return true;
+    const relativePath = toRelativeArtifactPath(this.paths, absolutePath);
+    const scenarioSegment = scenarioArtifactName ? sanitizeArtifactFolderName(scenarioArtifactName) : scenarioIndex ? `scenario-${scenarioIndex}` : "";
+    const scenarioPrefix = scenarioSegment ? `playwright/scenarios/${scenarioSegment}/` : "playwright/scenarios/";
+    if (scope === "scenario") return Boolean(scenarioPrefix && relativePath.startsWith(scenarioPrefix));
+    if (scenarioPrefix && relativePath.startsWith(scenarioPrefix)) return false;
+    return !relativePath.startsWith(scenarioPrefix);
+  }
+
+  private append(filePath: string, content: string): void {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.appendFileSync(filePath, content, "utf8");
+  }
+
+  private write(filePath: string, content: string): void {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, content, "utf8");
+  }
+
+  private writeBuffer(filePath: string, content: Buffer): void {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, content);
+  }
+
+  private walk(directory: string): string[] {
+    return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+      const childPath = path.join(directory, entry.name);
+      return entry.isDirectory() ? this.walk(childPath) : [childPath];
+    });
+  }
+}
+
+function isUploadCandidate(relativePath: string): boolean {
+  const normalized = relativePath.replace(/\\/g, "/").toLowerCase();
+  if (normalized.includes("/.playwright-artifacts-")) return false;
+  if (normalized.startsWith("playwright/report/trace/")) return false;
+  if (normalized.startsWith("playwright/report/data/")) return false;
+  if (normalized === "playwright/report/index.html") return true;
+  if (normalized === "playwright/output/.last-run.json") return true;
+  if (normalized.startsWith("playwright/output/")) {
+    return /(^|\/)(trace\.zip|error-context\.md|video\.webm|screenshot\.png)$/.test(normalized)
+      || /\.(png|jpe?g|webp|webm|mp4|mov|zip|md)$/.test(normalized);
+  }
+  return true;
+}
+
+function inferArtifactKind(relativePath: string): RegressionArtifactKind {
+  const normalized = relativePath.toLowerCase();
+  if (normalized === "run.log") return "log";
+  if (normalized.endsWith("/scenario.log")) return "log";
+  if (normalized === "events.ndjson") return "events";
+  if (normalized === "failures.md" || normalized.endsWith("/error.md")) return "failure";
+  if (normalized === "summary.json") return "summary";
+  if (/\.(png|jpe?g|webp)$/.test(normalized)) return "screenshot";
+  if (/\.(webm|mp4|mov)$/.test(normalized)) return "video";
+  if (normalized.includes("trace") || /\.(trace|zip)$/.test(normalized)) return "trace";
+  if (normalized.includes("healing")) return "healing";
+  return "other";
+}
+
+function inferContentType(relativePath: string): string {
+  const normalized = relativePath.toLowerCase();
+  if (normalized.endsWith(".json")) return "application/json";
+  if (normalized.endsWith(".ndjson") || normalized.endsWith(".jsonl")) return "application/x-ndjson";
+  if (normalized.endsWith(".txt")) return "text/plain";
+  if (normalized.endsWith(".md")) return "text/markdown";
+  if (normalized.endsWith(".png")) return "image/png";
+  if (normalized.endsWith(".jpg") || normalized.endsWith(".jpeg")) return "image/jpeg";
+  if (normalized.endsWith(".webp")) return "image/webp";
+  if (normalized.endsWith(".webm")) return "video/webm";
+  if (normalized.endsWith(".mp4")) return "video/mp4";
+  if (normalized.endsWith(".mov")) return "video/quicktime";
+  if (normalized.endsWith(".zip")) return "application/zip";
+  return "application/octet-stream";
+}
+
+function canonicalizeRunArtifactPath(relativePath: string, scenarioMappings: ScenarioArtifactMapping[]): string {
+  const normalized = relativePath.replace(/\\/g, "/");
+  const outputMatch = normalized.match(/^playwright\/output\/([^/]+)\/(.+)$/);
+  if (!outputMatch) return normalized;
+
+  const [, outputFolder, rest] = outputMatch;
+  const match = findScenarioMapping(outputFolder, scenarioMappings);
+  if (!match) return normalized;
+  return `playwright/scenarios/${sanitizeArtifactFolderName(match.scenarioArtifactName)}/playwright/${rest}`;
+}
+
+function findScenarioMapping(outputFolder: string, scenarioMappings: ScenarioArtifactMapping[]): ScenarioArtifactMapping | undefined {
+  const normalizedFolder = normalizeForMatch(outputFolder);
+  const candidates = scenarioMappings
+    .filter((mapping) => mapping.scenarioName && normalizedFolder.includes(normalizeForMatch(mapping.scenarioName)))
+    .filter((mapping) => !mapping.featureName || normalizedFolder.includes(normalizeForMatch(mapping.featureName)));
+  return candidates[0];
+}
+
+function normalizeForMatch(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function getScenarioArtifactName(relativePath: string): string | undefined {
+  const match = relativePath.replace(/\\/g, "/").match(/^playwright\/scenarios\/([^/]+)\//);
+  return match?.[1];
+}

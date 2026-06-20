@@ -1,0 +1,20 @@
+import { AssertionResult, AssertionSeverity, HealingInfo } from "@/types";
+
+export function passed(
+  name: string,
+  message: string,
+  severity: AssertionSeverity = "blocking",
+  healingInfo?: HealingInfo,
+): AssertionResult {
+  return { name, passed: true, severity, message, healingInfo };
+}
+
+export function failed(
+  name: string,
+  message: string,
+  severity: AssertionSeverity = "blocking",
+  details?: string,
+  healingInfo?: HealingInfo,
+): AssertionResult {
+  return { name, passed: false, severity, message, details, healingInfo };
+}

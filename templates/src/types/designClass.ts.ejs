@@ -1,0 +1,89 @@
+import { AssertionSeverity } from "@/types/assertion";
+import { LocatorInfo } from "@/types/state";
+
+export type ExtractSource = "text" | "attribute" | "value" | "list";
+export type ValueType = "string" | "number" | "currency" | "boolean";
+export type DesignOperationType = "set" | "append" | "putMap" | "assert-expression" | "call-function";
+
+export interface DesignExtractDefinition {
+  stateId?: string;
+  locatorKey?: string;
+  locator?: LocatorInfo;
+  source: ExtractSource;
+  attributeName?: string;
+  valueType?: ValueType;
+  itemFields?: Record<string, Omit<DesignExtractDefinition, "itemFields">>;
+  description?: string;
+}
+
+export interface DesignExpressionDefinition {
+  expression: string;
+  description?: string;
+}
+
+export interface DesignFunctionDefinition {
+  implementationId: string;
+  input?: unknown;
+  output?: unknown;
+  description?: string;
+}
+
+export interface UserAssertionFunctionDefinition {
+  implementationId: string;
+  severity?: AssertionSeverity;
+  description?: string;
+}
+
+export type DesignStoreValueSpec =
+  | { from: string }
+  | { literal: unknown }
+  | { expressionId: string }
+  | { functionId: string; args?: Record<string, unknown> }
+  | { fields: Record<string, DesignStoreValueSpec> };
+
+export type DesignOperationDefinition =
+  | {
+      type: "set";
+      key: string;
+      value: DesignStoreValueSpec;
+      description?: string;
+    }
+  | {
+      type: "append";
+      key: string;
+      value: DesignStoreValueSpec;
+      description?: string;
+    }
+  | {
+      type: "putMap";
+      key: string;
+      mapKey: DesignStoreValueSpec;
+      value: DesignStoreValueSpec;
+      description?: string;
+    }
+  | {
+      type: "assert-expression";
+      expressionId: string;
+      severity?: AssertionSeverity;
+      description?: string;
+    }
+  | {
+      type: "call-function";
+      functionId: string;
+      args?: Record<string, unknown>;
+      assignTo?: string;
+      description?: string;
+    };
+
+export interface DesignClassInfo {
+  id: string;
+  dbId?: string;
+  label?: string;
+  description?: string;
+  store?: Record<string, { initialValue?: unknown; description?: string }>;
+  extracts?: Record<string, DesignExtractDefinition>;
+  expressions?: Record<string, DesignExpressionDefinition>;
+  functions?: Record<string, DesignFunctionDefinition>;
+  assertionFunctions?: Record<string, UserAssertionFunctionDefinition>;
+  operations?: Record<string, DesignOperationDefinition>;
+}

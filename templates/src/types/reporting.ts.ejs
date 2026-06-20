@@ -1,0 +1,58 @@
+import type { AssertionResult } from "@/types/runtime";
+
+export type ScenarioStatus = "running" | "passed" | "failed";
+export type StepStatus = "running" | "passed" | "failed";
+
+export interface RunIdentity {
+  runId: string;
+  runName: string;
+  applicationId: string;
+  versionId?: string;
+  featureName?: string;
+  scenarioName?: string;
+  scenarioIndex?: number;
+  scenarioArtifactName?: string;
+}
+
+export interface RegressionEvent {
+  id: string;
+  type: string;
+  timestamp: string;
+  runId: string;
+  runName: string;
+  applicationId: string;
+  versionId?: string;
+  featureName?: string;
+  scenarioName?: string;
+  payload: unknown;
+}
+
+export interface StepReport {
+  stepType: string;
+  id: string;
+  label: string;
+  stepText?: string;
+  stepKeyword?: string;
+  results: AssertionResult[];
+  allPassed: boolean;
+}
+
+export interface RunSummary {
+  status: "passed" | "failed";
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  totals: { passed: number; failed: number; warnings: number };
+  reports: StepReport[];
+}
+
+export type RegressionArtifactKind = "failure" | "log" | "healing" | "summary" | "screenshot" | "video" | "trace" | "events" | "other";
+
+export interface RegressionArtifactFile {
+  absolutePath: string;
+  relativePath: string;
+  name: string;
+  kind: RegressionArtifactKind;
+  contentType: string;
+  scenarioArtifactName?: string;
+}

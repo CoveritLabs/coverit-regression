@@ -1,0 +1,22 @@
+import { LocatorInfo } from "@/types/state";
+
+export interface TransitionInfo {
+  id: string;
+  dbId: string;
+  label: string;
+  className: string;
+  action: {
+    type: string;
+    stateId?: string;
+    locatorKey?: string;
+    locator?: LocatorInfo;
+    value?: string;
+    url?: string;
+  };
+}
+
+export interface TransitionLocatorInfo {
+  stateId?: string;
+  locatorKey?: string;
+  locator?: LocatorInfo;
+}

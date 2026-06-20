@@ -1,0 +1,92 @@
+{
+  "id": "scenarioData",
+  "label": "Scenario Data",
+  "description": "Single scenario data lake for stored values, extracted values, expressions, and user functions.",
+  "store": {
+    "item.cost": {
+      "initialValue": 0,
+      "description": "Last selected item cost."
+    },
+    "cart.items": {
+      "initialValue": [],
+      "description": "Cart items accumulated by scenario hooks."
+    }
+  },
+  "extracts": {
+    "itemCost": {
+      "stateId": "S_HOME",
+      "locatorKey": "itemPrice",
+      "source": "text",
+      "valueType": "currency"
+    },
+    "cartItems": {
+      "stateId": "S_CART",
+      "locatorKey": "cartRows",
+      "source": "list",
+      "itemFields": {
+        "name": {
+          "locatorKey": "cartItemName",
+          "source": "text",
+          "valueType": "string"
+        },
+        "cost": {
+          "locatorKey": "cartItemCost",
+          "source": "text",
+          "valueType": "currency"
+        }
+      }
+    },
+    "cartTotal": {
+      "stateId": "S_CART",
+      "locatorKey": "cartTotal",
+      "source": "text",
+      "valueType": "currency"
+    }
+  },
+  "expressions": {
+    "cartTotalMatchesItems": {
+      "expression": "cartTotal == sum(cart.items[].cost)",
+      "description": "Rendered cart total equals the sum of stored cart items."
+    }
+  },
+  "functions": {
+    "normalizeCurrency": {
+      "implementationId": "normalizeCurrency",
+      "input": "unknown",
+      "output": "number",
+      "description": "Example user-authored data function."
+    }
+  },
+  "assertionFunctions": {
+    "cartHasItems": {
+      "implementationId": "cartHasItems",
+      "severity": "blocking",
+      "description": "Example user-authored assertion function."
+    }
+  },
+  "operations": {
+    "storeItemCost": {
+      "type": "set",
+      "key": "item.cost",
+      "value": {
+        "from": "itemCost"
+      }
+    },
+    "appendCartItem": {
+      "type": "append",
+      "key": "cart.items",
+      "value": {
+        "fields": {
+          "cost": {
+            "from": "itemCost"
+          }
+        }
+      }
+    },
+    "assertCartTotalMatchesItems": {
+      "type": "assert-expression",
+      "expressionId": "cartTotalMatchesItems",
+      "severity": "blocking"
+    }
+  }
+}

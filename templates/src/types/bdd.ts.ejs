@@ -1,0 +1,31 @@
+import type { HookTiming } from "@/types/actionHook";
+
+export type BddKeyword = "Given" | "When" | "Then" | "And" | "But";
+export type RuntimeStepType = "STATE" | "TRANSITION" | "ASSERTION" | "ACTION_HOOK";
+
+export interface RuntimeStepPlan {
+  type: RuntimeStepType;
+  id: string;
+  keyword: BddKeyword;
+  rawText: string;
+  hookTiming?: HookTiming;
+  parentId?: string;
+}
+
+export interface RuntimeScenarioPlan {
+  name: string;
+  designClassId?: string;
+  designClassStep?: {
+    type: "DESIGN_CLASS";
+    id: string;
+    keyword: BddKeyword;
+    rawText: string;
+  };
+  steps: RuntimeStepPlan[];
+}
+
+export interface RuntimeFeaturePlan {
+  name: string;
+  filePath: string;
+  scenarios: RuntimeScenarioPlan[];
+}

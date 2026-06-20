@@ -1,0 +1,8 @@
+import { BaseState } from "@/core/baseState";
+import { StateInfo } from "@/types";
+
+export abstract class BaseGeneratedState extends BaseState {
+  protected constructor(definition: StateInfo) {
+    super(definition);
+  }
+}

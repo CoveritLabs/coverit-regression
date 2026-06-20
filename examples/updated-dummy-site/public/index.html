@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Shop - Home</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;font-family:sans-serif}
+    body{background:#f5f5f5;display:flex;flex-direction:column;align-items:center;padding:32px 20px;color:#222}
+    header{width:100%;max-width:900px;display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;margin-bottom:24px}
+    header h1{font-size:24px}
+    nav{justify-self:end}
+    nav a{margin-left:16px;text-decoration:none;color:#555;font-size:14px}
+    .toolbar{width:100%;max-width:900px;display:flex;gap:12px;margin-bottom:16px}
+    .toolbar button{border:1px solid #d0d7de;background:white;border-radius:6px;padding:10px 14px;cursor:pointer;font-weight:600}
+    .home-shell{width:100%;max-width:900px;display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:start}
+    #home-sidebar{background:white;border:1px solid #e5e7eb;border-radius:8px;padding:16px;width:128px;transition:width .2s}
+    #home-sidebar[data-variant="extended"]{width:240px}
+    #home-sidebar .extended-only{display:none;margin-top:12px;color:#555;font-size:14px;line-height:1.4}
+    #home-sidebar[data-variant="extended"] .extended-only{display:block}
+    .product-card{background:white;border-radius:8px;padding:28px;box-shadow:0 2px 12px rgba(0,0,0,.08);text-align:center}
+    .product-image{width:140px;height:140px;background:#e8f4fd;border-radius:8px;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:56px}
+    .product-name{font-size:22px;font-weight:600;margin-bottom:8px}
+    .product-description{font-size:14px;color:#666;margin-bottom:16px;line-height:1.5}
+    .product-price{font-size:28px;font-weight:700;color:#2563eb;margin-bottom:24px}
+    #btn-add-cart{background:#2563eb;color:white;border:none;border-radius:8px;padding:14px 32px;font-size:16px;font-weight:600;cursor:pointer;width:100%;transition:background .2s}
+    #btn-add-cart:hover{background:#1d4ed8}
+    #btn-add-cart:disabled{background:#93c5fd;cursor:not-allowed}
+    #feedback{margin-top:12px;font-size:13px;color:#16a34a;min-height:20px}
+    #main-nav-panel,#profile-menu{display:none;width:100%;max-width:900px;background:white;border:1px solid #d0d7de;border-radius:8px;padding:16px;margin-bottom:16px}
+    #main-nav-panel[data-state="open"],#profile-menu[data-state="shown"]{display:block}
+    #profile-menu{max-width:260px;margin-left:auto;margin-right:calc((100vw - min(900px, 100vw - 40px)) / 2)}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>MyShop</h1>
+    <nav><a href="/">Home</a><a href="/cart" data-nav="cart">Cart</a></nav>
+    <button id="profile-toggle" type="button">Profile</button>
+  </header>
+
+  <section class="toolbar" aria-label="Home view controls">
+    <button id="home-nav-toggle" type="button">Toggle nav</button>
+    <button id="sidebar-toggle" type="button">Toggle sidebar</button>
+  </section>
+
+  <section id="main-nav-panel" data-state="closed" aria-label="Expanded navigation">
+    <strong>Navigation</strong>
+    <p>Deals, orders, wish list, and support links are available.</p>
+  </section>
+
+  <section id="profile-menu" data-state="hidden" aria-label="Profile menu">
+    <strong>Jane Shopper</strong>
+    <p>Profile, settings, and sign out.</p>
+  </section>
+
+  <main class="home-shell">
+    <aside id="home-sidebar" data-variant="collapsed" aria-label="Shopping sidebar">
+      <strong>Filters</strong>
+      <div class="extended-only">Category, price, rating, and delivery filters.</div>
+    </aside>
+
+    <div class="product-card">
+      <div class="product-image">W</div>
+      <div class="product-name">Super Widget</div>
+      <div class="product-description">The finest widget in the known universe.</div>
+      <div class="product-price">$9.99</div>
+      <button id="btn-add-cart">Add to Cart</button>
+      <div id="feedback"></div>
+    </div>
+  </main>
+
+  <script>
+    const state = { nav: "closed", sidebar: "collapsed", profileMenu: "hidden" };
+    const navPanel = document.getElementById("main-nav-panel");
+    const sidebar = document.getElementById("home-sidebar");
+    const profileMenu = document.getElementById("profile-menu");
+
+    function renderVariants() {
+      navPanel.dataset.state = state.nav;
+      sidebar.dataset.variant = state.sidebar;
+      profileMenu.dataset.state = state.profileMenu;
+    }
+
+    document.getElementById("home-nav-toggle").addEventListener("click", () => {
+      state.nav = state.nav === "open" ? "closed" : "open";
+      renderVariants();
+    });
+
+    document.getElementById("sidebar-toggle").addEventListener("click", () => {
+      state.sidebar = state.sidebar === "extended" ? "collapsed" : "extended";
+      renderVariants();
+    });
+
+    document.getElementById("profile-toggle").addEventListener("click", () => {
+      state.profileMenu = state.profileMenu === "shown" ? "hidden" : "shown";
+      renderVariants();
+    });
+
+    window.addEventListener("coverit:set-home-variants", event => {
+      Object.assign(state, event.detail);
+      renderVariants();
+    });
+
+    document.getElementById("btn-add-cart").addEventListener("click", async () => {
+      const btn = document.getElementById("btn-add-cart");
+      const feedback = document.getElementById("feedback");
+      btn.disabled = true; btn.textContent = "Adding...";
+      try {
+        const res = await fetch("/api/cart/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: 1, name: "Super Widget", price: 9.99 }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          sessionStorage.setItem("cart", JSON.stringify([data.item]));
+          feedback.textContent = "Added to cart.";
+          btn.disabled = false; btn.textContent = "Add to Cart";
+        }
+      } catch {
+        feedback.textContent = "Something went wrong.";
+        btn.disabled = false; btn.textContent = "Add to Cart";
+      }
+    });
+
+    renderVariants();
+  </script>
+</body>
+</html>

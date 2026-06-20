@@ -1,0 +1,53 @@
+import { Page } from "@playwright/test";
+
+import { failed, passed } from "@/core/assertionResult";
+import { AssertionResult, StateInfo } from "@/types";
+
+export abstract class BaseState {
+  readonly id: string;
+  readonly dbId: string;
+  readonly label: string;
+  readonly url: string;
+  readonly className: string;
+  readonly baselineDir?: string;
+  readonly snapshotPath?: string;
+
+  protected constructor(readonly definition: StateInfo) {
+    this.id = definition.id;
+    this.dbId = definition.dbId;
+    this.label = definition.label;
+    this.url = definition.url;
+    this.className = definition.className;
+    this.baselineDir = definition.baselineDir;
+    this.snapshotPath = definition.snapshotPath;
+  }
+
+  async setup(page: Page, origin?: string): Promise<void> {
+    await page.goto(this.resolveUrl(origin), { waitUntil: "networkidle" });
+  }
+
+  async assert(page: Page, origin?: string): Promise<AssertionResult[]> {
+    return [await this.assertUrl(page, origin)];
+  }
+
+  getExpectedUrl(origin?: string): string {
+    return this.resolveUrl(origin);
+  }
+
+  private async assertUrl(page: Page, origin?: string): Promise<AssertionResult> {
+    const expected = this.resolveUrl(origin);
+    const current = page.url();
+    return current === expected || current.startsWith(expected)
+      ? passed("URL Match", `URL matches "${expected}"`)
+      : failed("URL Match", `Expected "${expected}" but got "${current}"`);
+  }
+
+  private resolveUrl(origin?: string): string {
+    if (!origin) return this.url;
+    const resolved = new URL(this.url, origin);
+    const override = new URL(origin);
+    resolved.protocol = override.protocol;
+    resolved.host = override.host;
+    return resolved.toString();
+  }
+}

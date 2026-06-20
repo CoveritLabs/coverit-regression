@@ -1,0 +1,94 @@
+{
+	"templateVersion": "0.1.0",
+	"include": [],
+	"exclude": [],
+	"files": [
+		{
+      "path": "src/metadata/**",
+      "mode": "dynamic",
+      "description": "Generated project metadata."
+    },
+    {
+      "path": "src/states/generated/**",
+      "mode": "dynamic",
+      "description": "Generated state implementations."
+    },
+    {
+      "path": "src/transitions/generated/**",
+      "mode": "dynamic",
+      "description": "Generated transition implementations."
+    },
+    {
+      "path": "src/bdd/**",
+      "mode": "static",
+      "description": "BDD runtime parser and loader."
+    },
+    {
+      "path": "src/constants/**",
+      "mode": "static",
+      "description": "Generated framework runtime constants."
+    },
+    {
+      "path": "src/config/**",
+      "mode": "static",
+      "description": "Generated framework configuration loader."
+    },
+    {
+      "path": "src/core/**",
+      "mode": "static",
+      "description": "Generated framework runtime core."
+    },
+    {
+      "path": "src/design/**",
+      "mode": "static",
+      "description": "Singular design class runtime."
+    },
+    {
+      "path": "src/healing/**",
+      "mode": "static",
+      "description": "Selector healing runtime support."
+    },
+    {
+      "path": "src/registry/**",
+      "mode": "static",
+      "description": "Generated framework registry."
+    },
+    {
+      "path": "src/reporting/**",
+      "mode": "static",
+      "description": "Generated framework reporting support."
+    },
+    {
+      "path": "src/utils/**",
+      "mode": "static",
+      "description": "Generated framework utility helpers."
+    },
+    {
+      "path": "tests/**",
+      "mode": "static",
+      "description": "Generated Playwright regression specs."
+    },
+    {
+      "path": "package.json",
+      "mode": "static",
+      "description": "Generated framework package manifest."
+    },
+    {
+      "path": "playwright.config.ts",
+      "mode": "static",
+      "description": "Generated framework Playwright config."
+    },
+    {
+      "path": "src/extensions/*.ts",
+      "mode": "user-extension",
+      "createIfMissing": true,
+      "description": "Public user extension registry files."
+    },
+    {
+      "path": "coverit.config.json",
+      "mode": "user-extension",
+      "createIfMissing": true,
+      "description": "Project configuration can be edited after generation."
+    }
+	]
+}

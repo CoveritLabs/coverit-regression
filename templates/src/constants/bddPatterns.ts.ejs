@@ -1,0 +1,10 @@
+export const BDD_KEYWORDS = ["Given", "When", "Then", "And", "But"] as const;
+
+export const BDD_PATTERNS = {
+  state: /the UI (?:is in|should be in) state "([^"]+)"/,
+  transition: /I perform transition "([^"]+)"/,
+  designClass: /I use design class "([^"]+)"/,
+  assertion: /I assert "([^"]+)"/,
+  hook: /^(before|after) action I run hook "([^"]+)"/,
+} as const;
+

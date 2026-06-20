@@ -1,0 +1,8 @@
+import { BaseTransition } from "@/core/baseTransition";
+import { TransitionInfo } from "@/types";
+
+export abstract class BaseGeneratedTransition extends BaseTransition {
+  protected constructor(definition: TransitionInfo) {
+    super(definition);
+  }
+}

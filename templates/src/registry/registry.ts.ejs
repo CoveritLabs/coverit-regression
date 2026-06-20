@@ -1,0 +1,35 @@
+import { GENERATED_REGISTRY } from "@/metadata";
+import { BaseGeneratedState } from "@/states/generated";
+import * as generatedStates from "@/states/generated";
+import { BaseGeneratedTransition } from "@/transitions/generated";
+import * as generatedTransitions from "@/transitions/generated";
+import { extensionStateFactories, extensionTransitionFactories } from "@/extensions";
+
+type StateConstructor = new () => BaseGeneratedState;
+type TransitionConstructor = new () => BaseGeneratedTransition;
+
+export class Registry {
+  static resolveState(id: string): BaseGeneratedState {
+    const extensionFactory = extensionStateFactories[id];
+    if (extensionFactory) return extensionFactory(id);
+
+    const metadata = (GENERATED_REGISTRY.states as Record<string, { className: string; dbId: string }>)[id];
+    if (!metadata) throw new Error(`[Registry] Unknown state ID: "${id}"`);
+
+    const StateClass = (generatedStates as unknown as Record<string, StateConstructor>)[metadata.className];
+    if (!StateClass) throw new Error(`[Registry] Missing generated state class "${metadata.className}"`);
+    return new StateClass();
+  }
+
+  static resolveTransition(id: string): BaseGeneratedTransition {
+    const extensionFactory = extensionTransitionFactories[id];
+    if (extensionFactory) return extensionFactory(id);
+
+    const metadata = (GENERATED_REGISTRY.transitions as Record<string, { className: string; dbId: string }>)[id];
+    if (!metadata) throw new Error(`[Registry] Unknown transition ID: "${id}"`);
+
+    const TransitionClass = (generatedTransitions as unknown as Record<string, TransitionConstructor>)[metadata.className];
+    if (!TransitionClass) throw new Error(`[Registry] Missing generated transition class "${metadata.className}"`);
+    return new TransitionClass();
+  }
+}

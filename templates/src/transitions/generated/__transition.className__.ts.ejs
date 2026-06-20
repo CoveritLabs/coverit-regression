@@ -1,0 +1,8 @@
+import { TRANSITION_INFO } from "@/metadata";
+import { BaseGeneratedTransition } from "@/transitions/generated/BaseGeneratedTransition";
+
+export class <%- transition.className %> extends BaseGeneratedTransition {
+  constructor() {
+    super(TRANSITION_INFO[<%- JSON.stringify(transition.transitionId) %>]);
+  }
+}

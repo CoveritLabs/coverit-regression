@@ -1,0 +1,8 @@
+import { STATE_DEFINITIONS } from "@/metadata";
+import { BaseGeneratedState } from "@/states/generated/BaseGeneratedState";
+
+export class <%- state.className %> extends BaseGeneratedState {
+  constructor() {
+    super(STATE_DEFINITIONS[<%- JSON.stringify(state.stateId) %>]);
+  }
+}

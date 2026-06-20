@@ -1,0 +1,64 @@
+import path from "path";
+
+import { CoveritConfig } from "@/types";
+
+type ArtifactPaths = {
+  artifactRoot: string;
+  runRoot: string;
+  runLog: string;
+  events: string;
+  summary: string;
+  failures: string;
+  healing: string;
+  playwrightRoot: string;
+  playwrightResults: string;
+  playwrightReport: string;
+};
+
+export function getArtifactPaths(config: Pick<CoveritConfig, "reporting">, runId: string): ArtifactPaths {
+  const artifactRoot = path.resolve(config.reporting.artifactRoot || "artifacts");
+  const runRoot = path.join(artifactRoot, runId);
+  const playwrightRoot = path.join(runRoot, "playwright");
+  return {
+    artifactRoot,
+    runRoot,
+    runLog: path.join(runRoot, "run.log"),
+    events: path.join(runRoot, "events.ndjson"),
+    summary: path.join(runRoot, "summary.json"),
+    failures: path.join(runRoot, "failures.md"),
+    healing: path.join(runRoot, "healing.md"),
+    playwrightRoot,
+    playwrightResults: path.join(playwrightRoot, "output"),
+    playwrightReport: path.join(playwrightRoot, "report"),
+  };
+}
+
+export function getPlaywrightScenarioDir(paths: ArtifactPaths, scenarioArtifactName?: string, scenarioName?: string, scenarioIndex?: number): string {
+  const fallback = scenarioIndex ? `scenario-${scenarioIndex}` : "scenario";
+  return path.join(paths.playwrightRoot, "scenarios", sanitizeArtifactFolderName(scenarioArtifactName ?? scenarioName ?? fallback));
+}
+
+export function getPlaywrightScenarioLogPath(paths: ArtifactPaths, scenarioArtifactName?: string, scenarioName?: string, scenarioIndex?: number): string {
+  return path.join(getPlaywrightScenarioDir(paths, scenarioArtifactName, scenarioName, scenarioIndex), "scenario.log");
+}
+
+export function toRelativeArtifactPath(paths: ArtifactPaths, absolutePath: string): string {
+  return path.relative(paths.runRoot, absolutePath).replace(/\\/g, "/");
+}
+
+export function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "artifact";
+}
+
+export function sanitizeArtifactFolderName(value: string): string {
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "artifact";
+}

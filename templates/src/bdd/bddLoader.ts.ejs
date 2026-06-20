@@ -1,0 +1,19 @@
+import fs from "fs";
+import path from "path";
+
+import { BddParser } from "@/bdd/bddParser";
+import { RuntimeFeaturePlan } from "@/types";
+
+export class BddLoader {
+  private readonly parser = new BddParser();
+
+  loadAll(featuresDir: string): RuntimeFeaturePlan[] {
+    if (!fs.existsSync(featuresDir)) return [];
+
+    return fs
+      .readdirSync(featuresDir)
+      .filter((fileName) => fileName.endsWith(".feature"))
+      .sort((left, right) => left.localeCompare(right))
+      .map((fileName) => this.parser.parse(path.join(featuresDir, fileName)));
+  }
+}

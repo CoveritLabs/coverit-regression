@@ -1,0 +1,30 @@
+export type AssertionSeverity = "blocking" | "warning" | "info";
+
+export type AssertionDefinition =
+  | {
+      type: "element";
+      assertion: "text" | "visibility" | "attribute" | "value";
+      stateId?: string;
+      locatorKey?: string;
+      locator?: import("@/types/state").LocatorInfo;
+      expectedText?: string;
+      expectedValue?: string;
+      attributeName?: string;
+      visible?: boolean;
+    }
+  | { type: "page"; assertion: "title"; expectedText: string }
+  | { type: "page"; assertion: "url"; expectedUrl: string }
+  | { type: "page"; assertion: "url-fragment"; expectedFragment: string }
+  | { type: "state"; assertion: "dom-hash" | "screenshot"; stateId: string }
+  | { type: "design-operation"; operationId: string; args?: Record<string, unknown> }
+  | { type: "user-assertion"; functionId: string; args?: Record<string, unknown> };
+
+export interface AssertionInfo {
+  id: string;
+  dbId: string;
+  label: string;
+  targetId?: string;
+  contextId?: string;
+  severity?: AssertionSeverity;
+  definition: AssertionDefinition;
+}

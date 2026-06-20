@@ -1,0 +1,15 @@
+import { BaseGeneratedState } from "@/states/generated/BaseGeneratedState";
+<% for (const stateClass of metadata.stateClasses) { -%>
+import { <%- stateClass.className %> } from "@/states/generated/<%- stateClass.className %>";
+<% } -%>
+
+export const generatedStateFactories: Record<string, () => BaseGeneratedState> = {
+<% for (const stateClass of metadata.stateClasses) { -%>
+  <%- JSON.stringify(stateClass.stateId) %>: () => new <%- stateClass.className %>(),
+<% } -%>
+};
+
+export { BaseGeneratedState } from "@/states/generated/BaseGeneratedState";
+<% for (const stateClass of metadata.stateClasses) { -%>
+export { <%- stateClass.className %> } from "@/states/generated/<%- stateClass.className %>";
+<% } -%>

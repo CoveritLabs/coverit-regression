@@ -1,0 +1,24 @@
+export type HookTiming = "pre" | "post";
+
+export type ActionHookDefinition =
+  | {
+      type: "element-interaction";
+      action: "click" | "fill" | "hover" | "select" | "check" | "uncheck";
+      stateId?: string;
+      locatorKey?: string;
+      locator?: import("@/types/state").LocatorInfo;
+      value?: string;
+    }
+  | { type: "utility"; action: "wait" | "refresh" | "reload"; durationMs?: number }
+  | { type: "extract"; extractId: string; storeKey: string }
+  | { type: "design-operation"; operationId: string; args?: Record<string, unknown> };
+
+export interface ActionHookInfo {
+  id: string;
+  dbId: string;
+  label: string;
+  timing?: HookTiming;
+  targetId?: string;
+  contextId?: string;
+  definition: ActionHookDefinition;
+}

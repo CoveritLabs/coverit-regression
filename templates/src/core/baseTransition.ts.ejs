@@ -1,0 +1,79 @@
+import { Page } from "@playwright/test";
+
+import { failed, passed } from "@/core/assertionResult";
+import { createLocator, resolveLocatorInfo } from "@/core/locatorResolver";
+import { HealingEngine } from "@/healing/healingEngine";
+import { AssertionResult, HealingContext, HealingResult, TransitionInfo } from "@/types";
+
+export abstract class BaseTransition {
+  readonly id: string;
+  readonly dbId: string;
+  readonly label: string;
+  readonly className: string;
+  readonly action: TransitionInfo["action"];
+  private healingEngine = new HealingEngine();
+
+  protected constructor(readonly definition: TransitionInfo) {
+    this.id = definition.id;
+    this.dbId = definition.dbId;
+    this.label = definition.label;
+    this.className = definition.className;
+    this.action = definition.action;
+  }
+
+  injectHealingEngine(healingEngine: HealingEngine): void {
+    this.healingEngine = healingEngine;
+  }
+
+  async perform(page: Page, context: Partial<HealingContext> = {}): Promise<AssertionResult[]> {
+    const results: AssertionResult[] = [];
+    try {
+      const healing = await this.execute(page, context);
+      results.push(passed("Execute Action", `Executed ${this.action.type} for "${this.id}"`, "blocking", healing.healed ? {
+        wasHealed: true,
+        originalSelector: healing.originalSelector,
+        healedSelector: healing.healedSelector,
+        score: healing.score,
+        reason: healing.reason,
+        breakdown: healing.breakdown,
+      } : undefined));
+    } catch (error) {
+      results.push(failed("Execute Action", (error as Error).message));
+    }
+    return results;
+  }
+
+  private async execute(page: Page, context: Partial<HealingContext>): Promise<HealingResult> {
+    if (this.action.type === "navigate") {
+      if (!this.action.url) throw new Error(`Transition "${this.id}" is missing navigation url.`);
+      await page.goto(this.action.url, { waitUntil: "networkidle" });
+      return { healed: false, originalSelector: this.action.url, message: `Navigated to "${this.action.url}".` };
+    }
+
+    const locatorInfo = resolveLocatorInfo(this.action.locator, this.action.stateId, this.action.locatorKey);
+    if (!locatorInfo) throw new Error(`Transition "${this.id}" is missing locator information.`);
+
+    const healing = await this.healingEngine.findElement(page, locatorInfo, {
+      featureName: context.featureName,
+      scenarioName: context.scenarioName,
+      stepType: "TRANSITION",
+      stepId: this.id,
+      stepLabel: this.label,
+      action: this.action.type,
+      stateId: this.action.stateId,
+      locatorKey: this.action.locatorKey,
+    });
+    const locator = healing.healed && healing.healedSelector
+      ? page.locator(healing.healedSelector).first()
+      : createLocator(page, locatorInfo).first();
+
+    if (this.action.type === "click") await locator.click();
+    else if (this.action.type === "fill") await locator.fill(this.action.value ?? "");
+    else if (this.action.type === "hover") await locator.hover();
+    else if (this.action.type === "select") await locator.selectOption(this.action.value ?? "");
+    else throw new Error(`Unsupported transition action "${this.action.type}".`);
+
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    return healing;
+  }
+}

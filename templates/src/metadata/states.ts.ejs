@@ -1,0 +1,5 @@
+import { GeneratedStateDefinition, StateInfo } from "@/types";
+
+export const STATE_INFO = <%- helpers.ts(metadata.stateInfo) %> satisfies Record<string, StateInfo>;
+
+export const STATE_DEFINITIONS = <%- helpers.ts(metadata.stateInfo) %> satisfies Record<string, GeneratedStateDefinition>;

@@ -1,0 +1,47 @@
+{
+  "name": "coverit-regression-generator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build:generator": "tsc -p tsconfig.json --pretty false && tsc-alias -p tsconfig.json",
+    "build:test": "tsc -p tsconfig.test.json --pretty false && tsc-alias -p tsconfig.test.json",
+    "generate": "npm run build:generator && node dist/cli/main.js",
+    "worker": "npm run build:generator && node dist/worker.js",
+    "generate:check": "npm run build:generator && node dist/cli/main.js --check",
+    "test": "npm run build:test && node --test dist-test/test/**/*.test.js",
+    "commit": "cz",
+    "prepare": "husky"
+  },
+  "config": {
+    "commitizen": {
+      "path": "@commitlint/cz-commitlint"
+    }
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.4.3",
+    "@commitlint/config-conventional": "^20.4.3",
+    "@commitlint/cz-commitlint": "^20.4.3",
+    "@coveritlabs/git-hooks": "^1.0.0",
+    "@eslint/js": "^9.21.0",
+    "@types/ejs": "^3.1.5",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.9.3",
+    "@types/pg": "^8.20.0",
+    "@types/winston": "^2.4.4",
+    "commitizen": "^4.3.1",
+    "cz-conventional-changelog": "^3.3.0",
+    "husky": "^9.1.7",
+    "tsc-alias": "^1.8.17"
+  },
+  "dependencies": {
+    "bullmq": "^5.78.1",
+    "dotenv": "^17.4.2",
+    "ejs": "^6.0.1",
+    "ioredis": "^5.11.1",
+    "js-yaml": "^4.2.0",
+    "pg": "^8.21.0",
+    "typescript": "^6.0.3",
+    "winston": "^3.19.0"
+  }
+}

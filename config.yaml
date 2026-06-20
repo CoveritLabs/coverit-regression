@@ -1,0 +1,22 @@
+# Copyright (c) 2026 CoverIt Labs. All Rights Reserved.
+# Proprietary and confidential. Unauthorized use is strictly prohibited.
+# See LICENSE file in the project root for full license information.
+
+generator:
+  outputPath: "./output"
+  dryRun: false
+  check: false
+  logToFile: true
+
+gitWorkflow:
+  commitMessage: "chore(auto): update regression test suite"
+  regressionCodebase:
+    repositoryUrl: "https://github.com/CoveritLabs/coverit-regression-framework"
+    apiKey: ""
+    frameworkName: "test-framework"
+  codegenConfig:
+    codegenBranch: "automation/test"
+    prTargetBranch: "main"
+    prTitle: "chore(auto): automated framework regression updates"
+    prBody: "This is an automated pull request containing newly generated regression test suites."
+    prDraft: true
