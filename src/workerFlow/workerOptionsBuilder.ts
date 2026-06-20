@@ -20,14 +20,13 @@ export function buildWorkerCliOptions(
 ): WorkerCliOptions {
   const codegenConfig = normalizeConfig(context.sessionCodegenConfig ?? {});
   const repositoryUrl = context.regressionCodebase?.repositoryUrl?.trim() ?? "";
-  const apiKey = context.regressionCodebase?.apiKey?.trim() ?? "";
-  const prTargetBranch = codegenConfig.prTargetBranch?.trim() ?? "";
+  const apiKey = trimOptional(context.regressionCodebase?.apiKey);
+  const prTargetBranch = trimOptional(codegenConfig.prTargetBranch);
 
   if (!repositoryUrl) throw new Error("[Worker] regressionCodebase.repositoryUrl is required.");
-  if (!apiKey) throw new Error("[Worker] regressionCodebase.apiKey is required for repository workflow execution.");
-  if (!prTargetBranch) throw new Error("[Worker] codegenConfig.prTargetBranch is required.");
 
-  const outputPath = resolvePath(codegenConfig.outputPath ?? CLI_DEFAULTS.outputPath, cwd);
+  void cwd;
+  const outputPath = path.join(materializedInput.jobRootPath, "output");
 
   const generatorOptions = {
     ...CLI_DEFAULTS,
@@ -45,6 +44,7 @@ export function buildWorkerCliOptions(
       artifactRoot: codegenConfig.artifactRoot,
       healingEnabled: codegenConfig.healingEnabled,
       healingThreshold: codegenConfig.healingThreshold,
+      githubActionsEnabled: codegenConfig.githubActionsEnabled,
     },
   };
 
@@ -63,8 +63,11 @@ export function buildWorkerCliOptions(
         prTitle: codegenConfig.prTitle,
         prBody: codegenConfig.prBody,
         prDraft: codegenConfig.prDraft,
+        githubActionsEnabled: codegenConfig.githubActionsEnabled,
       },
       commitMessage: codegenConfig.commitMessage,
+      commitAuthorName: codegenConfig.commitAuthorName,
+      commitAuthorEmail: codegenConfig.commitAuthorEmail,
     },
   };
 }
@@ -77,6 +80,8 @@ function normalizeConfig(config: WorkerCodegenConfig): WorkerCodegenConfig {
     prTitle: trimOptional(config.prTitle),
     prBody: trimOptional(config.prBody),
     commitMessage: trimOptional(config.commitMessage),
+    commitAuthorName: trimOptional(config.commitAuthorName),
+    commitAuthorEmail: trimOptional(config.commitAuthorEmail),
     outputPath: trimOptional(config.outputPath),
     coveritApiBaseUrl: trimOptional(config.coveritApiBaseUrl),
     artifactRoot: trimOptional(config.artifactRoot),
@@ -86,8 +91,4 @@ function normalizeConfig(config: WorkerCodegenConfig): WorkerCodegenConfig {
 function trimOptional(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
-}
-
-function resolvePath(value: string, cwd: string): string {
-  return path.isAbsolute(value) ? value : path.resolve(cwd, value);
 }

@@ -11,6 +11,7 @@ import IORedis from "ioredis";
 import { logger } from "@utils/logger";
 import { processBddOutputJob } from "@/workerFlow/processor";
 import PostgresCrawlSessionRepository from "@/workerFlow/crawlSessionRepository";
+import { startOutputCleanupSchedule } from "@/workerFlow/outputCleanup";
 
 const QUEUE_NAME = "bdd-processing-queue";
 const BDD_OUTPUT_JOB_NAME = "task_process_bdd_output";
@@ -23,12 +24,14 @@ const redisConnection = new IORedis({
 });
 
 const sessionRepository = new PostgresCrawlSessionRepository();
+const outputCleanupTimer = startOutputCleanupSchedule();
 
 async function startup(): Promise<void> {
   logger.info("[Worker] Initialization completed. Connected to database and services.");
 }
 
 async function shutdown(): Promise<void> {
+  if (outputCleanupTimer) clearInterval(outputCleanupTimer);
   await sessionRepository.close();
   await redisConnection.quit();
   logger.info("[Worker] Gracefully closed all connections.");

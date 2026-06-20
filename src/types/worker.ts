@@ -43,6 +43,8 @@ export interface CrawlSessionCodegenContext {
 
 export type WorkerCodegenConfig = Partial<Pick<CodegenConfig, "codegenBranch" | "prTargetBranch" | "prTitle" | "prBody" | "prDraft">> & {
   commitMessage?: string;
+  commitAuthorName?: string;
+  commitAuthorEmail?: string;
   outputPath?: string;
   logToFile?: boolean;
   coveritApiBaseUrl?: string;
@@ -50,6 +52,7 @@ export type WorkerCodegenConfig = Partial<Pick<CodegenConfig, "codegenBranch" | 
   artifactRoot?: string;
   healingEnabled?: boolean;
   healingThreshold?: number;
+  githubActionsEnabled?: boolean;
 };
 
 export interface CrawlSessionRepository {

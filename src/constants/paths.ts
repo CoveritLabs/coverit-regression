@@ -11,6 +11,7 @@ export const PATHS = {
   ROOT: PROJECT_ROOT,
   OUTPUT: path.join(PROJECT_ROOT, "output"),
   INPUT: path.join(PROJECT_ROOT, "input"),
+  TMP: path.join(PROJECT_ROOT, "tmp"),
   LOG_FILE: path.join(PROJECT_ROOT, "logs", "generator.log"),
   BDD_FEATURES: path.join(PROJECT_ROOT, "input", "features"),
   FRAMEWORK_MAPPING: path.join(PROJECT_ROOT, "input", "framework-mapping"),

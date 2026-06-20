@@ -20,4 +20,5 @@ export interface GeneratedProjectConfig {
   artifactRoot?: string;
   healingEnabled?: boolean;
   healingThreshold?: number;
+  githubActionsEnabled?: boolean;
 }
