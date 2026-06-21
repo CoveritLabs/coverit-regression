@@ -12,7 +12,11 @@ interface CrawlSessionCodegenRow {
   base_url_snapshot: string | null;
   session_codegen_config: unknown;
   target_application_id: string;
+  target_application_name: string;
   target_application_base_url: string;
+  creator_user_id: string;
+  creator_email: string;
+  creator_name: string;
   regression_codebase_id: string | null;
   framework_name: string | null;
   repository_url: string | null;
@@ -36,7 +40,11 @@ export default class PostgresCrawlSessionRepository implements CrawlSessionRepos
           cs.base_url_snapshot AS base_url_snapshot,
           cs.codegen_config AS session_codegen_config,
           ta.id AS target_application_id,
+          ta.name AS target_application_name,
           ta.base_url AS target_application_base_url,
+          u.id AS creator_user_id,
+          u.email AS creator_email,
+          u.name AS creator_name,
           rc.id AS regression_codebase_id,
           rc.framework_name AS framework_name,
           rc.repository_url AS repository_url,
@@ -46,6 +54,8 @@ export default class PostgresCrawlSessionRepository implements CrawlSessionRepos
           ON tav.id = cs.app_version_id
         INNER JOIN target_applications ta
           ON ta.id = tav.target_application_id
+        INNER JOIN users u
+          ON u.id = cs.creator_user_id
         LEFT JOIN regression_codebases rc
           ON rc.id = cs.regression_codebase_id
         WHERE cs.crawl_session_id = $1
@@ -64,7 +74,13 @@ export default class PostgresCrawlSessionRepository implements CrawlSessionRepos
       sessionCodegenConfig: parseCodegenConfig(row.session_codegen_config),
       targetApplication: {
         id: row.target_application_id,
+        name: row.target_application_name,
         baseUrl: row.target_application_base_url,
+      },
+      creator: {
+        id: row.creator_user_id,
+        email: row.creator_email,
+        name: row.creator_name,
       },
       regressionCodebase: row.regression_codebase_id
         ? {
