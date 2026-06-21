@@ -25,6 +25,10 @@ on:
 jobs:
   added-flows:
     runs-on: ubuntu-latest
+    env:
+      COVERIT_API_REPORTING_ENABLED: ${{ vars.COVERIT_API_REPORTING_ENABLED }}
+      COVERIT_API_BASE_URL: ${{ vars.COVERIT_API_BASE_URL }}
+      COVERIT_API_KEY: ${{ secrets.COVERIT_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

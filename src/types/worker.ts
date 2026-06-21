@@ -31,7 +31,13 @@ export interface CrawlSessionCodegenContext {
   sessionCodegenConfig?: WorkerCodegenConfig;
   targetApplication: {
     id: string;
+    name?: string;
     baseUrl: string;
+  };
+  creator: {
+    id: string;
+    email: string;
+    name: string;
   };
   regressionCodebase?: {
     id?: string;
