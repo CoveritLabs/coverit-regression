@@ -52,7 +52,7 @@ export class CoveritApiClient {
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
-        "X-CoverIt-Api-Key": this.config.api.apiKey,
+        "X-CoverIt-Api-Key": this.config.api.apiKey ?? "",
       },
       body: JSON.stringify(body),
     }).finally(() => clearTimeout(timeout));
@@ -70,7 +70,7 @@ export class CoveritApiClient {
       method: "POST",
       signal: controller.signal,
       headers: {
-        "X-CoverIt-Api-Key": this.config.api.apiKey,
+        "X-CoverIt-Api-Key": this.config.api.apiKey ?? "",
       },
       body,
     }).finally(() => clearTimeout(timeout));

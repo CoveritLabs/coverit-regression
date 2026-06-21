@@ -89,6 +89,11 @@
       "description": "Generated framework Playwright config."
     },
     {
+      "path": ".env.example",
+      "mode": "static",
+      "description": "Documented environment variables for generated regression runs."
+    },
+    {
       "path": "src/extensions/*.ts",
       "mode": "user-extension",
       "createIfMissing": true,
