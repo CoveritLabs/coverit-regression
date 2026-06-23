@@ -64,7 +64,7 @@ export interface Locator {
 
 export interface FrameworkMappingFileSet {
   states: Record<string, StateStepMapping>;
-  transitions: Record<string, TransitionStepMapping>;
+  transitions: Record<string, RawTransitionStepMapping>;
   assertions: Record<string, AssertionStepMapping>;
   actionHooks: Record<string, ActionHookStepMapping>;
   designClass: DesignClassMapping;
@@ -110,7 +110,14 @@ export interface StateDomMapping {
 export interface TransitionStepMapping extends BaseStepMapping {
   type: StepType.TRANSITION;
   className: string;
-  action: TransitionActionMapping;
+  actions: TransitionActionMapping[];
+}
+
+export interface RawTransitionStepMapping extends BaseStepMapping {
+  type: StepType.TRANSITION;
+  className: string;
+  action?: TransitionActionInput;
+  actions?: TransitionActionMapping[];
 }
 
 export interface TransitionActionMapping {
@@ -121,6 +128,8 @@ export interface TransitionActionMapping {
   value?: string;
   url?: string;
 }
+
+export type TransitionActionInput = TransitionActionMapping | TransitionActionMapping[];
 
 export interface AssertionStepMapping extends BaseStepMapping {
   type: StepType.ASSERTION;

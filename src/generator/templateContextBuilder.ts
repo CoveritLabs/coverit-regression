@@ -55,7 +55,7 @@ class TemplateContextBuilder {
             id: transition.id,
             label: transition.label ?? transition.id,
             className: transition.className,
-            action: transition.action,
+            actions: transition.actions,
             overwritable: true,
           },
         ]),
@@ -103,9 +103,11 @@ class TemplateContextBuilder {
         model.transitions.map((transition) => [
           transition.id,
           {
-            stateId: transition.action.stateId,
-            locatorKey: transition.action.locatorKey,
-            locator: transition.action.locator,
+            actions: transition.actions.map((action) => ({
+              stateId: action.stateId,
+              locatorKey: action.locatorKey,
+              locator: action.locator,
+            })),
             overwritable: true,
           },
         ]),

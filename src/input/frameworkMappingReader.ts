@@ -10,7 +10,9 @@ import {
   DesignClassMapping,
   FrameworkMappingFileSet,
   GeneratedFrameworkModel,
+  RawTransitionStepMapping,
   StateStepMapping,
+  TransitionActionMapping,
   TransitionStepMapping,
 } from "@/types/framework";
 import FileHandler from "@utils/files";
@@ -28,7 +30,7 @@ class FrameworkMappingReader {
 
     const mapping = {
       states: this.readJson<Record<string, StateStepMapping>>("states.json"),
-      transitions: this.readJson<Record<string, TransitionStepMapping>>("transitions.json"),
+      transitions: this.readJson<Record<string, RawTransitionStepMapping>>("transitions.json"),
       assertions: this.readJson<Record<string, AssertionStepMapping>>("assertions.json"),
       actionHooks: this.readJson<Record<string, ActionHookStepMapping>>("action-hooks.json"),
       designClass: this.readJson<DesignClassMapping>("design-class.json"),
@@ -52,7 +54,7 @@ class FrameworkMappingReader {
   buildGeneratedFrameworkModel(mapping: FrameworkMappingFileSet): GeneratedFrameworkModel {
     return {
       states: this.sortMappings(Object.values(mapping.states)),
-      transitions: this.sortMappings(Object.values(mapping.transitions)),
+      transitions: this.sortMappings(Object.values(mapping.transitions).map((transition) => this.normalizeTransition(transition))),
       assertions: this.sortMappings(Object.values(mapping.assertions)),
       actionHooks: this.sortMappings(Object.values(mapping.actionHooks)),
       designClass: mapping.designClass,
@@ -70,6 +72,21 @@ class FrameworkMappingReader {
 
   private sortMappings<T extends BaseStepMapping>(mappings: T[]): T[] {
     return mappings.sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  private normalizeTransition(transition: RawTransitionStepMapping): TransitionStepMapping {
+    const { action: _action, actions: _actions, ...rest } = transition;
+    return {
+      ...rest,
+      actions: this.transitionActions(transition),
+    };
+  }
+
+  private transitionActions(transition: RawTransitionStepMapping): TransitionActionMapping[] {
+    if (Array.isArray(transition.actions)) return transition.actions;
+    if (Array.isArray(transition.action)) return transition.action;
+    if (transition.action) return [transition.action];
+    return [];
   }
 }
 

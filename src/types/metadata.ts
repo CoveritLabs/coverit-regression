@@ -33,7 +33,7 @@ export interface TransitionMetadata extends OverwritableMetadata {
   dbId?: string;
   label: string;
   className: string;
-  action: TransitionActionMapping;
+  actions: TransitionActionMapping[];
 }
 
 export interface AssertionMetadata extends OverwritableMetadata {
@@ -71,10 +71,14 @@ export interface StateLocatorMetadata extends OverwritableMetadata {
   [locatorKey: string]: Locator | boolean | undefined;
 }
 
-export interface TransitionLocatorMetadata extends OverwritableMetadata {
+export interface TransitionActionLocatorMetadata {
   stateId?: string;
   locatorKey?: string;
   locator?: Locator;
+}
+
+export interface TransitionLocatorMetadata extends TransitionActionLocatorMetadata, OverwritableMetadata {
+  actions?: TransitionActionLocatorMetadata[];
 }
 
 export interface RegistryMetadata {

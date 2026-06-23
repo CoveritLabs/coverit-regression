@@ -1,23 +1,30 @@
 import { LocatorInfo } from "@/types/state";
 
+export interface TransitionActionInfo {
+  type: string;
+  stateId?: string;
+  locatorKey?: string;
+  locator?: LocatorInfo;
+  value?: string;
+  url?: string;
+}
+
 export interface TransitionInfo {
   id: string;
   label: string;
   className: string;
-  action: {
-    type: string;
-    stateId?: string;
-    locatorKey?: string;
-    locator?: LocatorInfo;
-    value?: string;
-    url?: string;
-  };
+  actions?: TransitionActionInfo[];
+  action?: TransitionActionInfo | TransitionActionInfo[];
   overwritable?: boolean;
 }
 
-export interface TransitionLocatorInfo {
+export interface TransitionActionLocatorInfo {
   stateId?: string;
   locatorKey?: string;
   locator?: LocatorInfo;
+}
+
+export interface TransitionLocatorInfo extends TransitionActionLocatorInfo {
+  actions?: TransitionActionLocatorInfo[];
   overwritable?: boolean;
 }
