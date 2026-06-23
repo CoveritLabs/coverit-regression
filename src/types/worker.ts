@@ -8,8 +8,7 @@ import type { GeneratorOptions } from "@/types/generator";
 export interface BddOutputPayload {
   status?: string;
   session_id: string;
-  feature_name: string;
-  feature_text: string;
+  features: BddOutputFeature[];
   states: Record<string, unknown>;
   transitions: Record<string, unknown>;
   assertions: Record<string, unknown>;
@@ -20,10 +19,17 @@ export interface BddOutputPayload {
   codegen_config?: WorkerCodegenConfig;
 }
 
+export interface BddOutputFeature {
+  id?: string;
+  feature_name: string;
+  feature_text: string;
+  scenario_names?: string[];
+}
+
 export interface MaterializedBddInput {
   jobRootPath: string;
   inputPath: string;
-  featurePath: string;
+  featurePaths: string[];
   mappingPath: string;
 }
 

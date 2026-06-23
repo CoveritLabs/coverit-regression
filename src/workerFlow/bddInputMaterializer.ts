@@ -38,8 +38,7 @@ export async function materializeBddInput(
   await fs.mkdir(featuresPath, { recursive: true });
   await fs.mkdir(mappingPath, { recursive: true });
 
-  const featurePath = path.join(featuresPath, `${safeFeatureName(payload.feature_name)}.feature`);
-  await fs.writeFile(featurePath, payload.feature_text, "utf8");
+  const featurePaths = await writeFeatures(featuresPath, payload.features);
 
   await writeJson(path.join(mappingPath, "states.json"), payload.states);
   await writeJson(path.join(mappingPath, "transitions.json"), payload.transitions);
@@ -47,7 +46,38 @@ export async function materializeBddInput(
   await writeJson(path.join(mappingPath, "action-hooks.json"), payload.action_hooks);
   await writeJson(path.join(mappingPath, "design-class.json"), payload.design_class ?? DEFAULT_DESIGN_CLASS);
 
-  return { jobRootPath, inputPath, featurePath, mappingPath };
+  return { jobRootPath, inputPath, featurePaths, mappingPath };
+}
+
+async function writeFeatures(
+  featuresPath: string,
+  features: BddOutputPayload["features"],
+): Promise<string[]> {
+  const usedFileNames = new Set<string>();
+  const featurePaths: string[] = [];
+
+  for (const feature of features) {
+    const fileName = uniqueFeatureFileName(feature.feature_name, usedFileNames);
+    const featurePath = path.join(featuresPath, fileName);
+    await fs.writeFile(featurePath, feature.feature_text, "utf8");
+    featurePaths.push(featurePath);
+  }
+
+  return featurePaths;
+}
+
+function uniqueFeatureFileName(featureName: string, usedFileNames: Set<string>): string {
+  const baseName = safeFeatureName(featureName);
+  let fileName = `${baseName}.feature`;
+  let suffix = 2;
+
+  while (usedFileNames.has(fileName.toLowerCase())) {
+    fileName = `${baseName}_${suffix}.feature`;
+    suffix += 1;
+  }
+
+  usedFileNames.add(fileName.toLowerCase());
+  return fileName;
 }
 
 function safeFeatureName(featureName: string): string {
