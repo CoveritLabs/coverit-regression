@@ -7,7 +7,6 @@ import { AssertionResult, HealingContext, HealingResult, TransitionInfo } from "
 
 export abstract class BaseTransition {
   readonly id: string;
-  readonly dbId: string;
   readonly label: string;
   readonly className: string;
   readonly action: TransitionInfo["action"];
@@ -15,7 +14,6 @@ export abstract class BaseTransition {
 
   protected constructor(readonly definition: TransitionInfo) {
     this.id = definition.id;
-    this.dbId = definition.dbId;
     this.label = definition.label;
     this.className = definition.className;
     this.action = definition.action;

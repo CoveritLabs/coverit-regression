@@ -1,5 +1,5 @@
-import { LocatorInfo, TransitionLocatorInfo } from "@/types";
+import { StateLocatorMap, TransitionLocatorInfo } from "@/types";
 
-export const STATE_LOCATORS = <%- helpers.ts(metadata.locators.states) %> satisfies Record<string, Record<string, LocatorInfo>>;
+export const STATE_LOCATORS = <%- helpers.ts(metadata.locators.states) %> satisfies Record<string, StateLocatorMap>;
 
 export const TRANSITION_LOCATORS = <%- helpers.ts(metadata.locators.transitions) %> satisfies Record<string, TransitionLocatorInfo>;

@@ -2,7 +2,6 @@ import { LocatorInfo } from "@/types/state";
 
 export interface TransitionInfo {
   id: string;
-  dbId: string;
   label: string;
   className: string;
   action: {
@@ -13,10 +12,12 @@ export interface TransitionInfo {
     value?: string;
     url?: string;
   };
+  overwritable?: boolean;
 }
 
 export interface TransitionLocatorInfo {
   stateId?: string;
   locatorKey?: string;
   locator?: LocatorInfo;
+  overwritable?: boolean;
 }
