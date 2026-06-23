@@ -23,6 +23,13 @@ interface CrawlSessionCodegenRow {
   repo_api_key: string | null;
 }
 
+interface RegressionCodebaseRow {
+  id: string;
+  framework_name: string | null;
+  repository_url: string | null;
+  api_key: string | null;
+}
+
 export default class PostgresCrawlSessionRepository implements CrawlSessionRepository {
   private readonly pool: Pool;
 
@@ -90,6 +97,36 @@ export default class PostgresCrawlSessionRepository implements CrawlSessionRepos
             apiKey: row.repo_api_key ?? undefined,
           }
         : undefined,
+    };
+  }
+
+  async findRegressionCodebase(
+    targetApplicationId: string,
+    regressionCodebaseId: string,
+  ): Promise<CrawlSessionCodegenContext["regressionCodebase"]> {
+    const result = await this.pool.query<RegressionCodebaseRow>(
+      `
+        SELECT
+          id,
+          framework_name,
+          repository_url,
+          api_key
+        FROM regression_codebases
+        WHERE id = $1
+          AND target_application_id = $2
+        LIMIT 1
+      `,
+      [regressionCodebaseId, targetApplicationId],
+    );
+
+    const row = result.rows[0];
+    if (!row) throw new Error(`[Worker] Regression codebase was not found: ${regressionCodebaseId}`);
+
+    return {
+      id: row.id,
+      frameworkName: row.framework_name ?? undefined,
+      repositoryUrl: row.repository_url ?? undefined,
+      apiKey: row.api_key ?? undefined,
     };
   }
 

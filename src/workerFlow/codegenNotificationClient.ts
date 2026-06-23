@@ -23,7 +23,7 @@ export default class CodegenNotificationClient {
     this.internalServiceToken = options.internalServiceToken ?? process.env.INTERNAL_SERVICE_TOKEN;
   }
 
-  async notifyGenerated(sessionId: string, git: GitWorkflowResult): Promise<void> {
+  async notifyGenerated(sessionId: string, git: GitWorkflowResult, flowIds: string[] = []): Promise<void> {
     await this.post(sessionId, {
       status: "generated",
       branchName: git.branchName,
@@ -31,6 +31,7 @@ export default class CodegenNotificationClient {
       noChanges: git.noChanges,
       pushed: git.pushed,
       pullRequestUrl: git.pullRequest?.url ?? null,
+      flowIds,
     });
   }
 

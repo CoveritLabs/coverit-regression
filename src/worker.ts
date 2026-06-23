@@ -72,7 +72,7 @@ worker.on("ready", async () => {
 worker.on("completed", async (job: Job, result: ProcessBddOutputJobResult | undefined) => {
   logger.info(`[Worker] Job ${job.id} (${job.name}) completed successfully.`);
   if (job.name === BDD_OUTPUT_JOB_NAME && result?.success) {
-    await codegenNotificationClient.notifyGenerated(result.sessionId, result.git);
+    await codegenNotificationClient.notifyGenerated(result.sessionId, result.git, result.flowIds);
   }
 });
 

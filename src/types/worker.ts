@@ -15,6 +15,9 @@ export interface BddOutputPayload {
   assertions: Record<string, unknown>;
   action_hooks: Record<string, unknown>;
   design_class?: Record<string, unknown>;
+  flow_ids?: string[];
+  regression_codebase_id?: string;
+  codegen_config?: WorkerCodegenConfig;
 }
 
 export interface MaterializedBddInput {
@@ -63,6 +66,10 @@ export type WorkerCodegenConfig = Partial<Pick<CodegenConfig, "codegenBranch" | 
 
 export interface CrawlSessionRepository {
   findCodegenContext(sessionId: string): Promise<CrawlSessionCodegenContext>;
+  findRegressionCodebase?(
+    targetApplicationId: string,
+    regressionCodebaseId: string,
+  ): Promise<CrawlSessionCodegenContext["regressionCodebase"]>;
   close?(): Promise<void>;
 }
 

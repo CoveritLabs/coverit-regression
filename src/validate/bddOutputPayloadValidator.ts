@@ -19,6 +19,9 @@ class BddOutputPayloadValidator {
       assertions: this.optionalRecord(payload, "assertions") ?? {},
       action_hooks: this.optionalRecord(payload, "action_hooks") ?? {},
       design_class: this.optionalRecord(payload, "design_class"),
+      flow_ids: this.optionalStringArray(payload, "flow_ids"),
+      regression_codebase_id: this.optionalString(payload, "regression_codebase_id"),
+      codegen_config: this.optionalRecord(payload, "codegen_config") as BddOutputPayload["codegen_config"],
     };
   }
 
@@ -39,6 +42,17 @@ class BddOutputPayloadValidator {
   private optionalRecord(payload: Record<string, unknown>, key: string): Record<string, unknown> | undefined {
     const value = payload[key];
     return this.isRecord(value) ? value : undefined;
+  }
+
+  private optionalString(payload: Record<string, unknown>, key: string): string | undefined {
+    const value = payload[key];
+    return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  }
+
+  private optionalStringArray(payload: Record<string, unknown>, key: string): string[] | undefined {
+    const value = payload[key];
+    if (!Array.isArray(value)) return undefined;
+    return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {
