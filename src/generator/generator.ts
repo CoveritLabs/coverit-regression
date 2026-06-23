@@ -18,6 +18,7 @@ import TemplateContextBuilder from "./templateContextBuilder";
 import { diagnostics } from "@/diagnostics/diagnostics";
 import GenerationRecordStore from "@planner/generationRecordStore";
 import BddMappingValidator from "@/validate/bddMappingValidator";
+import FeatureFilePatcher from "./featureFilePatcher";
 
 class Generator {
   private readonly options: GeneratorOptions;
@@ -29,6 +30,7 @@ class Generator {
   private manifestReader: ManifestReader;
   private generationRecordStore: GenerationRecordStore;
   private bddMappingValidator: BddMappingValidator;
+  private featureFilePatcher: FeatureFilePatcher;
 
   constructor(options: GeneratorOptions) {
     this.options = options;
@@ -40,6 +42,7 @@ class Generator {
     this.manifestReader = new ManifestReader(options.outputPath);
     this.generationRecordStore = new GenerationRecordStore();
     this.bddMappingValidator = new BddMappingValidator();
+    this.featureFilePatcher = new FeatureFilePatcher();
   }
 
   createPlan(manifest: Manifest, features: FileEntry[], templates: FileEntry[]): FileOperation[] {
@@ -80,7 +83,9 @@ class Generator {
     const materializedTemplates = await this.fileEmitter.materialize(templates, { context: templateContext });
 
     logger.info("[Generator] Starting generation process...");
-    const operations = this.createPlan(manifest, features, materializedTemplates);
+    const existingFeaturesPath = FileHandler.join(this.options.outputPath, "features");
+    const patchedFeatures = this.featureFilePatcher.patch(features, existingFeaturesPath);
+    const operations = this.createPlan(manifest, patchedFeatures, materializedTemplates);
     const hasChanges = this.fileEmitter.applyOperations(operations, this.options.dryRun, this.options.check);
 
     if (!this.options.dryRun && !this.options.check)
