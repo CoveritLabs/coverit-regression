@@ -2,12 +2,15 @@
 // Proprietary and confidential. Unauthorized use is strictly prohibited.
 // See LICENSE file in the project root for full license information.
 
-import { GeneratedFrameworkModel, Locator, StateStepMapping } from "@/types/framework";
-import {
+import { GeneratedFrameworkModel, StateStepMapping } from "@/types/framework";
+import type {
   GeneratedStateClassMetadata,
   GeneratedTransitionClassMetadata,
   LocatorMetadata,
   RegistryMetadata,
+  StateLocatorMetadata,
+} from "@/types/metadata";
+import {
   TemplateMetadata,
   TemplateRenderContext,
 } from "@/types/templates";
@@ -34,14 +37,14 @@ class TemplateContextBuilder {
         model.states.map((state) => [
           state.id,
           {
-            id: state.id,
-            dbId: state.dbId ?? state.id,
             label: state.label ?? state.id,
+            id: state.id,
             url: state.url,
             className: state.className,
             baselineDir: state.baselineDir,
             snapshotPath: state.snapshotPath,
             dom: state.dom,
+            overwritable: true,
           },
         ]),
       ),
@@ -50,10 +53,10 @@ class TemplateContextBuilder {
           transition.id,
           {
             id: transition.id,
-            dbId: transition.dbId ?? transition.id,
             label: transition.label ?? transition.id,
             className: transition.className,
-            action: transition.action,
+            actions: transition.actions,
+            overwritable: true,
           },
         ]),
       ),
@@ -62,12 +65,12 @@ class TemplateContextBuilder {
           assertion.id,
           {
             id: assertion.id,
-            dbId: assertion.dbId ?? assertion.id,
             label: assertion.label ?? assertion.id,
             targetId: assertion.targetId,
             contextId: assertion.contextId,
             severity: assertion.severity,
             definition: assertion.definition,
+            overwritable: true,
           },
         ]),
       ),
@@ -76,16 +79,16 @@ class TemplateContextBuilder {
           hook.id,
           {
             id: hook.id,
-            dbId: hook.dbId ?? hook.id,
             label: hook.label ?? hook.id,
             timing: hook.timing,
             targetId: hook.targetId,
             contextId: hook.contextId,
             definition: hook.definition,
+            overwritable: true,
           },
         ]),
       ),
-      designClassInfo: model.designClass,
+      designClassInfo: this.buildDesignClassInfo(model),
       locators: this.buildLocators(model),
       registry: this.buildRegistry(model),
       stateClasses: this.buildStateClasses(model),
@@ -100,17 +103,21 @@ class TemplateContextBuilder {
         model.transitions.map((transition) => [
           transition.id,
           {
-            stateId: transition.action.stateId,
-            locatorKey: transition.action.locatorKey,
-            locator: transition.action.locator,
+            actions: transition.actions.map((action) => ({
+              stateId: action.stateId,
+              locatorKey: action.locatorKey,
+              locator: action.locator,
+            })),
+            overwritable: true,
           },
         ]),
       ),
     };
   }
 
-  private extractStateLocators(state: StateStepMapping): Record<string, Locator> {
+  private extractStateLocators(state: StateStepMapping): StateLocatorMetadata {
     return {
+      overwritable: true,
       ...(state.dom?.landmarks ?? {}),
       ...(state.dom?.elements ?? {}),
     };
@@ -122,8 +129,8 @@ class TemplateContextBuilder {
         model.states.map((state) => [
           state.id,
           {
-            dbId: state.dbId ?? state.id,
             className: state.className,
+            overwritable: true,
           },
         ]),
       ),
@@ -131,8 +138,8 @@ class TemplateContextBuilder {
         model.transitions.map((transition) => [
           transition.id,
           {
-            dbId: transition.dbId ?? transition.id,
             className: transition.className,
+            overwritable: true,
           },
         ]),
       ),
@@ -140,7 +147,7 @@ class TemplateContextBuilder {
         model.assertions.map((assertion) => [
           assertion.id,
           {
-            dbId: assertion.dbId ?? assertion.id,
+            overwritable: true,
           },
         ]),
       ),
@@ -148,13 +155,21 @@ class TemplateContextBuilder {
         model.actionHooks.map((hook) => [
           hook.id,
           {
-            dbId: hook.dbId ?? hook.id,
+            overwritable: true,
           },
         ]),
       ),
       designClass: {
-        dbId: model.designClass.dbId ?? model.designClass.id,
+        overwritable: true,
       },
+    };
+  }
+
+  private buildDesignClassInfo(model: GeneratedFrameworkModel): GeneratedFrameworkModel["designClass"] & { overwritable: boolean } {
+    const { dbId: _dbId, ...designClass } = model.designClass;
+    return {
+      ...designClass,
+      overwritable: true,
     };
   }
 

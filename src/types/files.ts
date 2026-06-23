@@ -20,6 +20,7 @@ export enum FileOwnershipMode {
 export interface FileEntry {
   relativePath: string;
   absolutePath: string;
+  content?: string;
 }
 
 export interface FileOperation {

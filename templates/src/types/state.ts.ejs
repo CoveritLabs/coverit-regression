@@ -1,12 +1,12 @@
 export interface StateInfo {
   id: string;
-  dbId: string;
   label: string;
   url: string;
   className: string;
   baselineDir: string;
   snapshotPath?: string;
   dom?: StateDomInfo;
+  overwritable?: boolean;
 }
 
 export interface StateDomInfo {
@@ -23,6 +23,11 @@ export interface LocatorInfo {
   text?: string;
   role?: string;
   testId?: string;
+}
+
+export interface StateLocatorMap {
+  overwritable?: boolean;
+  [locatorKey: string]: LocatorInfo | boolean | undefined;
 }
 
 export interface GeneratedStateDefinition extends StateInfo {}

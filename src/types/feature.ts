@@ -1,3 +1,7 @@
+// Copyright (c) 2026 CoverIt Labs. All Rights Reserved.
+// Proprietary and confidential. Unauthorized use is strictly prohibited.
+// See LICENSE file in the project root for full license information.
+
 import { FileEntry } from "./files";
 
 export type StepKeyword = "Given" | "When" | "Then" | "And" | "But";
@@ -30,4 +34,15 @@ export interface Feature {
   name: string;
   filePath: FileEntry;
   scenarios: Scenario[];
+}
+
+export interface FeatureScenarioBlock {
+  name: string;
+  flowId?: string;
+  text: string;
+}
+
+export interface ParsedFeatureFile extends FileEntry {
+  preamble: string;
+  scenarios: FeatureScenarioBlock[];
 }

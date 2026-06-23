@@ -5,7 +5,6 @@ import { AssertionResult, StateInfo } from "@/types";
 
 export abstract class BaseState {
   readonly id: string;
-  readonly dbId: string;
   readonly label: string;
   readonly url: string;
   readonly className: string;
@@ -14,7 +13,6 @@ export abstract class BaseState {
 
   protected constructor(readonly definition: StateInfo) {
     this.id = definition.id;
-    this.dbId = definition.dbId;
     this.label = definition.label;
     this.url = definition.url;
     this.className = definition.className;

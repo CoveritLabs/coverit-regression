@@ -1,3 +1,7 @@
+// Copyright (c) 2026 CoverIt Labs. All Rights Reserved.
+// Proprietary and confidential. Unauthorized use is strictly prohibited.
+// See LICENSE file in the project root for full license information.
+
 import { StepType } from "./feature";
 
 export enum AssertionSeverity {
@@ -60,7 +64,7 @@ export interface Locator {
 
 export interface FrameworkMappingFileSet {
   states: Record<string, StateStepMapping>;
-  transitions: Record<string, TransitionStepMapping>;
+  transitions: Record<string, RawTransitionStepMapping>;
   assertions: Record<string, AssertionStepMapping>;
   actionHooks: Record<string, ActionHookStepMapping>;
   designClass: DesignClassMapping;
@@ -85,6 +89,7 @@ export interface BaseStepMapping {
   dbId?: string;
   label?: string;
   description?: string;
+  overwritable?: boolean;
 }
 
 export interface StateStepMapping extends BaseStepMapping {
@@ -105,7 +110,14 @@ export interface StateDomMapping {
 export interface TransitionStepMapping extends BaseStepMapping {
   type: StepType.TRANSITION;
   className: string;
-  action: TransitionActionMapping;
+  actions: TransitionActionMapping[];
+}
+
+export interface RawTransitionStepMapping extends BaseStepMapping {
+  type: StepType.TRANSITION;
+  className: string;
+  action?: TransitionActionInput;
+  actions?: TransitionActionMapping[];
 }
 
 export interface TransitionActionMapping {
@@ -116,6 +128,8 @@ export interface TransitionActionMapping {
   value?: string;
   url?: string;
 }
+
+export type TransitionActionInput = TransitionActionMapping | TransitionActionMapping[];
 
 export interface AssertionStepMapping extends BaseStepMapping {
   type: StepType.ASSERTION;
@@ -234,6 +248,7 @@ export interface DesignClassMapping {
   functions?: Record<string, DesignFunctionDefinition>;
   assertionFunctions?: Record<string, UserAssertionFunctionDefinition>;
   operations?: Record<string, DesignOperationDefinition>;
+  overwritable?: boolean;
 }
 
 export interface DesignStoreSlot {

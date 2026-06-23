@@ -68,7 +68,7 @@ class Planner {
       const rule = this.findMatchingRule(file.relativePath);
       const mode = rule ? rule.mode : defaultMode;
       const targetPath = this.getTargetPath(file.relativePath, rootPath);
-      const operation = this.createOperation(file.absolutePath, targetPath, file.relativePath, mode, generationRecord);
+      const operation = this.createOperation(file, targetPath, mode, generationRecord);
       operations.push(operation);
     }
 
@@ -84,14 +84,15 @@ class Planner {
   }
 
   private createOperation(
-    sourcePath: string,
+    file: FileEntry,
     targetPath: string,
-    relativePath: string,
     mode: FileOwnershipMode,
     generationRecord: GenerationRecord,
   ): FileOperation {
+    const sourceContent = file.content ?? FileHandler.readFile(file.absolutePath);
+
     if (mode === FileOwnershipMode.Dynamic) {
-      return this.diffDetector.detect(relativePath, sourcePath, targetPath, mode, generationRecord);
+      return this.diffDetector.detect(file.relativePath, file.absolutePath, targetPath, mode, generationRecord);
     }
 
     const targetExists = FileHandler.exists(targetPath);
@@ -100,9 +101,11 @@ class Planner {
       return {
         kind: FileOperationKind.Create,
         mode,
-        relativePath,
-        sourcePath,
+        relativePath: file.relativePath,
+        sourcePath: file.absolutePath,
         targetPath,
+        content: file.content,
+        generatedContent: sourceContent,
         reason: "Target file does not exist.",
       };
     }
@@ -111,23 +114,23 @@ class Planner {
       return {
         kind: FileOperationKind.Preserve,
         mode,
-        relativePath,
-        sourcePath,
+        relativePath: file.relativePath,
+        sourcePath: file.absolutePath,
         targetPath,
         reason: "User extension file already exists and is preserved.",
       };
     }
 
-    const source = FileHandler.readFile(sourcePath);
     const target = FileHandler.readFile(targetPath);
-    if (Buffer.from(source).equals(Buffer.from(target))) {
+    if (Buffer.from(sourceContent).equals(Buffer.from(target))) {
       return {
         kind: FileOperationKind.Unchanged,
         mode,
-        relativePath,
-        sourcePath,
+        relativePath: file.relativePath,
+        sourcePath: file.absolutePath,
         targetPath,
-        generatedContent: source,
+        content: file.content,
+        generatedContent: sourceContent,
         reason: "Target file already exists and is unchanged.",
       };
     }
@@ -135,10 +138,11 @@ class Planner {
     return {
       kind: FileOperationKind.Update,
       mode,
-      relativePath,
-      sourcePath,
+      relativePath: file.relativePath,
+      sourcePath: file.absolutePath,
       targetPath,
-      generatedContent: source,
+      content: file.content,
+      generatedContent: sourceContent,
       reason: "Target file exists and will be updated.",
     };
   }

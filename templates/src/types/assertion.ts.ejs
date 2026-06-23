@@ -21,10 +21,10 @@ export type AssertionDefinition =
 
 export interface AssertionInfo {
   id: string;
-  dbId: string;
   label: string;
   targetId?: string;
   contextId?: string;
   severity?: AssertionSeverity;
   definition: AssertionDefinition;
+  overwritable?: boolean;
 }
