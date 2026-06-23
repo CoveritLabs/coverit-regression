@@ -1,3 +1,7 @@
+// Copyright (c) 2026 CoverIt Labs. All Rights Reserved.
+// Proprietary and confidential. Unauthorized use is strictly prohibited.
+// See LICENSE file in the project root for full license information.
+
 import { StepType } from "./feature";
 
 export enum AssertionSeverity {
@@ -85,6 +89,7 @@ export interface BaseStepMapping {
   dbId?: string;
   label?: string;
   description?: string;
+  overwritable?: boolean;
 }
 
 export interface StateStepMapping extends BaseStepMapping {
@@ -234,6 +239,7 @@ export interface DesignClassMapping {
   functions?: Record<string, DesignFunctionDefinition>;
   assertionFunctions?: Record<string, UserAssertionFunctionDefinition>;
   operations?: Record<string, DesignOperationDefinition>;
+  overwritable?: boolean;
 }
 
 export interface DesignStoreSlot {

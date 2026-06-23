@@ -71,6 +71,7 @@ class Generator {
     diagnostics.clear();
     const manifest = this.manifestReader.read();
 
+    logger.info(`[Generator] Validating input features and framework mapping...`);
     const features = this.bddReader.scan();
     const parsedFeatures = this.parseFeatures(features);
 
@@ -83,8 +84,7 @@ class Generator {
     const materializedTemplates = await this.fileEmitter.materialize(templates, { context: templateContext });
 
     logger.info("[Generator] Starting generation process...");
-    const existingFeaturesPath = FileHandler.join(this.options.outputPath, "features");
-    const patchedFeatures = this.featureFilePatcher.patch(features, existingFeaturesPath);
+    const patchedFeatures = this.patchFeatures(features);
     const operations = this.createPlan(manifest, patchedFeatures, materializedTemplates);
     const hasChanges = this.fileEmitter.applyOperations(operations, this.options.dryRun, this.options.check);
 
@@ -102,6 +102,14 @@ class Generator {
     logger.info(`[Generator] Parsed ${parsedFeatures.length} feature(s).`);
     for (const feature of parsedFeatures) this.bddReader.printFeature(feature);
     return parsedFeatures;
+  }
+
+  private patchFeatures(features: FileEntry[]): FileEntry[] {
+    logger.info(`[Generator] Patching ${features.length} feature(s)...`);
+    const existingFeaturesPath = FileHandler.join(this.options.outputPath, "features");
+    const patchedFeatures: FileEntry[] = this.featureFilePatcher.patch(features, existingFeaturesPath);
+    logger.info(`[Generator] Patched ${patchedFeatures.length} feature(s).`);
+    return patchedFeatures;
   }
 }
 
