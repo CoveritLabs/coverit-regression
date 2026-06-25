@@ -25,6 +25,8 @@ on:
 jobs:
   regression:
     runs-on: ubuntu-latest
+    env:
+      CI: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
