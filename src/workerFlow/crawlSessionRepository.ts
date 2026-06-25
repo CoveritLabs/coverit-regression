@@ -3,6 +3,7 @@
 // See LICENSE file in the project root for full license information.
 
 import { Pool } from "pg";
+import type { PoolConfig } from "pg";
 
 import type { CrawlSessionCodegenContext, CrawlSessionRepository, WorkerCodegenConfig } from "@/types/worker";
 
@@ -35,7 +36,7 @@ export default class PostgresCrawlSessionRepository implements CrawlSessionRepos
 
   constructor(connectionString: string | undefined = process.env.DATABASE_URL) {
     if (!connectionString) throw new Error("[Worker] DATABASE_URL is required to load crawl session context.");
-    this.pool = new Pool({ connectionString });
+    this.pool = new Pool(buildPoolConfig(connectionString));
   }
 
   async findCodegenContext(sessionId: string): Promise<CrawlSessionCodegenContext> {
@@ -132,6 +133,29 @@ export default class PostgresCrawlSessionRepository implements CrawlSessionRepos
 
   async close(): Promise<void> {
     await this.pool.end();
+  }
+}
+
+function buildPoolConfig(connectionString: string): PoolConfig {
+  const sslConnectionString = getUnverifiedSslConnectionString(connectionString);
+  if (!sslConnectionString) return { connectionString };
+  return {
+    connectionString: sslConnectionString,
+    ssl: {
+      rejectUnauthorized: false,
+    },
+  };
+}
+
+function getUnverifiedSslConnectionString(connectionString: string): string | undefined {
+  try {
+    const url = new URL(connectionString);
+    const sslMode = url.searchParams.get("sslmode");
+    if (sslMode !== "require" && sslMode !== "no-verify") return undefined;
+    url.searchParams.delete("sslmode");
+    return url.toString();
+  } catch {
+    return undefined;
   }
 }
 

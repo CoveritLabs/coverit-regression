@@ -50,12 +50,13 @@ class GitClient {
   }
 
   async checkoutRemoteBranch(repositoryPath: string, branchName: string): Promise<void> {
-    await this.runGit(["checkout", "-B", branchName, `origin/${branchName}`], repositoryPath);
+    await this.runGit(["checkout", "--detach", `origin/${branchName}`], repositoryPath);
     await this.runGit(["reset", "--hard", `origin/${branchName}`], repositoryPath);
   }
 
   async createBranchFromBase(repositoryPath: string, branchName: string, baseBranch: string): Promise<void> {
-    await this.runGit(["checkout", "-B", branchName, `origin/${baseBranch}`], repositoryPath);
+    logger.info(`[Git Workflow] Preparing detached HEAD for branch "${branchName}" from "origin/${baseBranch}".`);
+    await this.runGit(["checkout", "--detach", `origin/${baseBranch}`], repositoryPath);
   }
 
   async createOrResetBranch(repositoryPath: string, branchName: string, baseBranch: string): Promise<void> {
@@ -63,7 +64,8 @@ class GitClient {
   }
 
   async createBranchFromHead(repositoryPath: string, branchName: string): Promise<void> {
-    await this.runGit(["checkout", "-B", branchName], repositoryPath);
+    logger.info(`[Git Workflow] Preparing detached HEAD for fallback branch "${branchName}".`);
+    await this.runGit(["checkout", "--detach", "HEAD"], repositoryPath);
   }
 
   async remoteBranchExists(repositoryPath: string, apiKey: string | undefined, branchName: string): Promise<boolean> {
@@ -146,7 +148,7 @@ class GitClient {
 
   async push(repositoryPath: string, apiKey: string | undefined, branchName: string): Promise<void> {
     const remoteTarget = this.getAuthenticatedUrl(await this.getRemoteUrl(repositoryPath), apiKey);
-    await this.runGit(["push", remoteTarget, `HEAD:${branchName}`], repositoryPath);
+    await this.runGit(["push", remoteTarget, `HEAD:${this.remoteHeadRef(branchName)}`], repositoryPath);
   }
 
   private async clone(repositoryUrl: string, apiKey: string | undefined, targetPath: string): Promise<void> {
@@ -174,6 +176,10 @@ class GitClient {
     if (!apiKey) return repositoryUrl;
     const cleanUrl = repositoryUrl.replace(/https:\/\/.*@/, "https://");
     return cleanUrl.replace("https://", `https://x-access-token:${apiKey}@`);
+  }
+
+  private remoteHeadRef(branchName: string): string {
+    return branchName.startsWith("refs/heads/") ? branchName : `refs/heads/${branchName}`;
   }
 
   private async runGit(args: string[], cwd?: string) {
