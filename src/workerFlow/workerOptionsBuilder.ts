@@ -39,7 +39,6 @@ export function buildWorkerCliOptions(
       applicationBaseUrl: context.baseUrlSnapshot || context.targetApplication.baseUrl,
       applicationId: context.targetApplication.id,
       versionId: context.appVersionId,
-      coveritApiBaseUrl: codegenConfig.coveritApiBaseUrl,
       localArtifactsEnabled: codegenConfig.localArtifactsEnabled,
       artifactRoot: codegenConfig.artifactRoot,
       healingEnabled: codegenConfig.healingEnabled,
@@ -83,7 +82,6 @@ function normalizeConfig(config: WorkerCodegenConfig): WorkerCodegenConfig {
     commitAuthorName: trimOptional(config.commitAuthorName),
     commitAuthorEmail: trimOptional(config.commitAuthorEmail),
     outputPath: trimOptional(config.outputPath),
-    coveritApiBaseUrl: trimOptional(config.coveritApiBaseUrl),
     artifactRoot: trimOptional(config.artifactRoot),
   };
 }

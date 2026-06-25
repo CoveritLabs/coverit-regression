@@ -62,7 +62,6 @@ export type WorkerCodegenConfig = Partial<Pick<CodegenConfig, "codegenBranch" | 
   commitAuthorEmail?: string;
   outputPath?: string;
   logToFile?: boolean;
-  coveritApiBaseUrl?: string;
   localArtifactsEnabled?: boolean;
   artifactRoot?: string;
   healingEnabled?: boolean;

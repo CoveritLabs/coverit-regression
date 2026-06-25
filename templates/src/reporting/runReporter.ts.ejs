@@ -16,20 +16,21 @@ export class RunReporter {
   private readonly logger: Logger;
   private scenarioStartedAt?: string;
 
-  constructor(identity: Partial<RunIdentity> = {}, config = loadCoveritConfig()) {
+  constructor(identity: Partial<RunIdentity> = {}, config?: ReturnType<typeof loadCoveritConfig>) {
+    config = config ?? this.loadConfigOrFallback();
     const runId = identity.runId ?? getCoveritRunId();
-    logger.configure({ logFilePath: getArtifactPaths(config, runId).runLog });
-    this.apiClient = config.api.enabled ? new CoveritApiClient(config) : undefined;
-    this.artifactStore = config.reporting.localArtifactsEnabled ? new LocalArtifactStore(config, runId) : undefined;
-    const scenarioLogPath = this.artifactStore && identity.scenarioName ? this.artifactStore.getScenarioLogPath({
-      scenarioName: identity.scenarioName,
-      scenarioIndex: identity.scenarioIndex,
-      scenarioArtifactName: identity.scenarioArtifactName,
-    }) : undefined;
+    try {
+      logger.configure({ logFilePath: getArtifactPaths(config, runId).runLog });
+    } catch (error) {
+      logger.warn("Artifacts", `Could not configure run log. ${(error as Error).message}`);
+    }
+    this.apiClient = this.createApiClient(config);
+    this.artifactStore = this.createArtifactStore(config, runId);
+    const scenarioLogPath = this.getScenarioLogPath(identity);
     this.logger = logger.forScenario({ logFilePath: scenarioLogPath });
-    if (config.reporting.apiDisabledReason && !RunReporter.warnedApiDisabledReasons.has(config.reporting.apiDisabledReason)) {
-      RunReporter.warnedApiDisabledReasons.add(config.reporting.apiDisabledReason);
-      logger.warn("CoverIt API", config.reporting.apiDisabledReason);
+    if (config.apiReporting.disabledReason && !RunReporter.warnedApiDisabledReasons.has(config.apiReporting.disabledReason)) {
+      RunReporter.warnedApiDisabledReasons.add(config.apiReporting.disabledReason);
+      logger.warn("CoverIt API", config.apiReporting.disabledReason);
     }
     this.identity = {
       runId,
@@ -235,6 +236,63 @@ export class RunReporter {
       action();
     } catch (error) {
       this.logger.warn("Artifacts", `Could not ${operation}. ${(error as Error).message}`);
+    }
+  }
+
+  private loadConfigOrFallback(): ReturnType<typeof loadCoveritConfig> {
+    try {
+      return loadCoveritConfig();
+    } catch (error) {
+      logger.warn("CoverIt config", `Could not load CoverIt config. Reporting will continue with local defaults. ${(error as Error).message}`);
+      return {
+        application: { baseUrl: process.env.COVERIT_APP_BASE_URL ?? "http://localhost:3000" },
+        run: { name: "Run", applicationId: "", versionId: undefined },
+        apiReporting: {
+          enabled: false,
+          baseUrl: "",
+          apiKey: undefined,
+          disabledReason: "API reporting disabled: CoverIt config could not be loaded.",
+        },
+        reporting: {
+          localArtifactsEnabled: true,
+          artifactRoot: "artifacts",
+        },
+        healing: { enabled: true, threshold: 0.55 },
+      };
+    }
+  }
+
+  private createApiClient(config: ReturnType<typeof loadCoveritConfig>): CoveritApiClient | undefined {
+    if (!config.apiReporting.enabled) return undefined;
+    try {
+      return new CoveritApiClient(config.apiReporting);
+    } catch (error) {
+      logger.warn("CoverIt API", `Could not initialize API client. ${(error as Error).message}`);
+      return undefined;
+    }
+  }
+
+  private createArtifactStore(config: ReturnType<typeof loadCoveritConfig>, runId: string): LocalArtifactStore | undefined {
+    if (!config.reporting.localArtifactsEnabled) return undefined;
+    try {
+      return new LocalArtifactStore(config, runId);
+    } catch (error) {
+      logger.warn("Artifacts", `Could not initialize local artifact store. ${(error as Error).message}`);
+      return undefined;
+    }
+  }
+
+  private getScenarioLogPath(identity: Partial<RunIdentity>): string | undefined {
+    if (!this.artifactStore || !identity.scenarioName) return undefined;
+    try {
+      return this.artifactStore.getScenarioLogPath({
+        scenarioName: identity.scenarioName,
+        scenarioIndex: identity.scenarioIndex,
+        scenarioArtifactName: identity.scenarioArtifactName,
+      });
+    } catch (error) {
+      logger.warn("Artifacts", `Could not resolve scenario log path. ${(error as Error).message}`);
+      return undefined;
     }
   }
 }
