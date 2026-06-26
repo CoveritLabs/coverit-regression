@@ -8,19 +8,9 @@ import os from "os";
 import path from "path";
 
 import { PATHS } from "@constants/paths";
+import { preprocessBddFeatures } from "@/bdd/bddFeaturePreprocessor";
+import { DEFAULT_DESIGN_CLASS, normalizeBddOutputPayload } from "@/bdd/bddPayloadNormalizer";
 import type { BddOutputPayload, MaterializedBddInput } from "@/types/worker";
-
-const DEFAULT_DESIGN_CLASS = {
-  id: "scenarioData",
-  label: "Scenario Data",
-  description: "Single scenario data store for generated regression flows.",
-  store: {},
-  extracts: {},
-  expressions: {},
-  functions: {},
-  assertionFunctions: {},
-  operations: {},
-};
 
 export async function materializeBddInput(
   payload: BddOutputPayload,
@@ -38,13 +28,13 @@ export async function materializeBddInput(
   await fs.mkdir(featuresPath, { recursive: true });
   await fs.mkdir(mappingPath, { recursive: true });
 
-  const featurePaths = await writeFeatures(featuresPath, payload.features);
+  const normalizedPayload = normalizeBddOutputPayload(payload);
+  const featurePaths = await writeFeatures(featuresPath, preprocessBddFeatures(payload));
 
-  await writeJson(path.join(mappingPath, "states.json"), payload.states);
-  await writeJson(path.join(mappingPath, "transitions.json"), payload.transitions);
-  await writeJson(path.join(mappingPath, "assertions.json"), payload.assertions);
-  await writeJson(path.join(mappingPath, "action-hooks.json"), payload.action_hooks);
-  await writeJson(path.join(mappingPath, "design-class.json"), payload.design_class ?? DEFAULT_DESIGN_CLASS);
+  await writeJson(path.join(mappingPath, "states.json"), normalizedPayload.states);
+  await writeJson(path.join(mappingPath, "transitions.json"), normalizedPayload.transitions);
+  await writeJson(path.join(mappingPath, "assertions.json"), normalizedPayload.assertions);
+  await writeJson(path.join(mappingPath, "design-class.json"), normalizedPayload.design_class ?? DEFAULT_DESIGN_CLASS);
 
   return { jobRootPath, inputPath, featurePaths, mappingPath };
 }

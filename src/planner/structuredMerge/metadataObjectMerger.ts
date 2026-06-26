@@ -88,6 +88,7 @@ class MetadataObjectMerger {
   }
 
   private mergeExportValue(name: string, current: JsonRecord, next: JsonRecord): JsonRecord {
+    if (name === "ASSERTION_INFO" || name === "ACTION_HOOK_INFO") return next;
     if (RECORD_EXPORTS.has(name)) return this.mergeRecord(current, next);
     if (name === "GENERATED_REGISTRY") return this.mergeRegistry(current, next);
     if (name === "DESIGN_CLASS_INFO") return this.isOverwritable(current) ? next : current;
@@ -100,7 +101,9 @@ class MetadataObjectMerger {
 
     for (const [key, currentValue] of Object.entries(current)) {
       const nextValue = next[key];
-      if (this.isRegistryMapKey(key) && this.isRecord(currentValue) && this.isRecord(nextValue)) {
+      if (key === "assertions" || key === "actionHooks") {
+        merged[key] = nextValue;
+      } else if (this.isRegistryMapKey(key) && this.isRecord(currentValue) && this.isRecord(nextValue)) {
         merged[key] = this.mergeRecord(currentValue, nextValue);
       } else if (key === "designClass" && this.isRecord(currentValue) && this.isRecord(nextValue)) {
         merged[key] = this.isOverwritable(currentValue) ? nextValue : currentValue;
@@ -119,7 +122,7 @@ class MetadataObjectMerger {
   }
 
   private isRegistryMapKey(key: string): boolean {
-    return key === "states" || key === "transitions" || key === "assertions" || key === "actionHooks";
+    return key === "states" || key === "transitions";
   }
 
   private mergeRecord(current: JsonRecord, next: JsonRecord): JsonRecord {

@@ -10,9 +10,8 @@ const STEP_REFERENCE = {
   DESIGN_CLASS: /I use design class "([^"]+)"/,
   STATE: /the UI (?:is in|should be in) state "([^"]+)"/,
   TRANSITION: /I perform transition "([^"]+)"/,
-  ASSERTION: /I assert "([^"]+)"/,
-  GENERATED_HOOK: /^(?:before|after) action I run hook "([^"]+)"/,
-  EXTRACT: /^(?:before|after) action I extract "([^"]+)"/,
+  CLEAN_ELEMENT: /'((?:\\'|[^'])+)'\.[A-Za-z0-9_-]+/,
+  CLEAN_CALL: /^call '((?:\\'|[^'])+)'$/,
 };
 
 class BddMappingValidator {
@@ -26,12 +25,15 @@ class BddMappingValidator {
     }
   }
 
-  private validateStep(filePath: string, scenarioName: string, step: Step, mapping: FrameworkMappingFileSet): void {
+  private validateStep(
+    filePath: string,
+    scenarioName: string,
+    step: Step,
+    mapping: FrameworkMappingFileSet,
+  ): void {
     const designClassId = this.extract(step.stepText, STEP_REFERENCE.DESIGN_CLASS);
     if (designClassId) {
-      if (designClassId !== mapping.designClass.id) {
-        this.warn("UNKNOWN_DESIGN_CLASS_ID", scenarioName, `design class "${designClassId}"`, filePath);
-      }
+      if (designClassId !== mapping.designClass.id) this.warn("UNKNOWN_DESIGN_CLASS_ID", scenarioName, `design class "${designClassId}"`, filePath);
       return;
     }
 
@@ -43,72 +45,29 @@ class BddMappingValidator {
 
     if (step.type === StepType.TRANSITION) {
       const transitionId = this.extract(step.stepText, STEP_REFERENCE.TRANSITION);
-      if (transitionId && !mapping.transitions[transitionId]) {
-        this.warn("UNKNOWN_TRANSITION_ID", scenarioName, `transition "${transitionId}"`, filePath);
-      }
+      if (transitionId && !mapping.transitions[transitionId]) this.warn("UNKNOWN_TRANSITION_ID", scenarioName, `transition "${transitionId}"`, filePath);
       return;
     }
 
-    if (step.type === StepType.ASSERTION) {
-      const assertionId = this.extract(step.stepText, STEP_REFERENCE.ASSERTION);
-      if (assertionId) this.validateAssertion(filePath, scenarioName, assertionId, mapping);
+    const elementAlias = this.extract(step.stepText, STEP_REFERENCE.CLEAN_ELEMENT);
+    if (elementAlias && !this.elementAliasExists(elementAlias, mapping)) {
+      this.warn("UNKNOWN_ELEMENT_ALIAS", scenarioName, `element alias "${elementAlias}"`, filePath);
       return;
     }
 
-    if (step.type === StepType.ACTION_HOOK) {
-      this.validateActionHook(filePath, scenarioName, step, mapping);
+    const functionId = this.extract(step.stepText, STEP_REFERENCE.CLEAN_CALL);
+    if (functionId && !mapping.assertions.functions?.[functionId] && !mapping.designClass.functions?.[functionId]) {
+      this.warn("UNKNOWN_FUNCTION_ID", scenarioName, `function "${functionId}"`, filePath);
     }
   }
 
-  private validateAssertion(
-    filePath: string,
-    scenarioName: string,
-    assertionId: string,
-    mapping: FrameworkMappingFileSet,
-  ): void {
-    if (mapping.assertions[assertionId]) return;
-    if (mapping.designClass.assertionFunctions?.[assertionId]) return;
-    if (mapping.designClass.operations?.[assertionId]) return;
-    if (this.operationUsesExpression(assertionId, mapping)) return;
-
-    this.warn("UNKNOWN_ASSERTION_ID", scenarioName, `assertion "${assertionId}"`, filePath);
-  }
-
-  private validateActionHook(
-    filePath: string,
-    scenarioName: string,
-    step: Step,
-    mapping: FrameworkMappingFileSet,
-  ): void {
-    const hookId = this.extract(step.stepText, STEP_REFERENCE.GENERATED_HOOK);
-    if (hookId) {
-      if (!this.actionHookExists(hookId, mapping) && !mapping.designClass.operations?.[hookId]) {
-        this.warn("UNKNOWN_ACTION_HOOK_ID", scenarioName, `action hook "${hookId}"`, filePath);
-      }
-      return;
-    }
-
-    const extractId = this.extract(step.stepText, STEP_REFERENCE.EXTRACT);
-    if (extractId && !mapping.designClass.extracts?.[extractId]) {
-      this.warn("UNKNOWN_EXTRACT_ID", scenarioName, `extract "${extractId}"`, filePath);
-    }
-  }
-
-  private actionHookExists(id: string, mapping: FrameworkMappingFileSet): boolean {
-    if (mapping.actionHooks[id]) return true;
-    return Object.values(mapping.actionHooks).some(
-      (hook) => hook.definition.type === "design-operation" && hook.definition.operationId === id,
-    );
-  }
-
-  private operationUsesExpression(expressionId: string, mapping: FrameworkMappingFileSet): boolean {
-    return Object.values(mapping.designClass.operations ?? {}).some(
-      (operation) => operation.type === "assert-expression" && operation.expressionId === expressionId,
-    );
+  private elementAliasExists(alias: string, mapping: FrameworkMappingFileSet): boolean {
+    if (mapping.assertions.elements?.[alias]) return true;
+    return Object.values(mapping.states).some((state) => Boolean(state.dom?.elements?.[alias]));
   }
 
   private extract(text: string, pattern: RegExp): string | undefined {
-    return text.match(pattern)?.[1];
+    return text.match(pattern)?.[1]?.replace(/\\'/g, "'");
   }
 
   private warn(code: string, scenarioName: string, reference: string, filePath: string): void {
@@ -117,4 +76,3 @@ class BddMappingValidator {
 }
 
 export default BddMappingValidator;
-

@@ -13,6 +13,13 @@ const REGEX = {
   FEATURE: /Feature:\s*(.+)/gm,
   SCENARIO: /Scenario:\s*(.+)/gm,
   STEP: /^\s*(Given|When|Then|And|But)\s+(.+)/gm,
+  STATE: /the UI (?:is in|should be in) state "([^"]+)"/,
+  TRANSITION: /I perform transition "([^"]+)"/,
+  DESIGN_CLASS: /I use design class "([^"]+)"/,
+  ASSERTION: /^I assert "([^"]+)"$/,
+  GENERATED_HOOK: /^(?:before|after) action I run hook "([^"]+)"$/,
+  CLEAN_ASSERTION: /^(?:assert|call)\b/,
+  CLEAN_HOOK: /^(?:wait|wait-for-url|wait-for-load-state|refresh|reload|go-back|go-forward|click|dblclick|fill|clear|hover|select|check|uncheck|press|focus|blur|assign|append|prepend|merge|remove|pop|increment|decrement|toggle|delete|put|call)\b/,
 };
 
 class BddReader {
@@ -39,6 +46,7 @@ class BddReader {
   parse(featureFile: FileEntry): Feature {
     logger.debug(`[BDD Reader] Parsing feature file: ${featureFile.relativePath}`);
     const featureRegex = REGEX.FEATURE;
+    featureRegex.lastIndex = 0;
     const content = FileHandler.readFile(featureFile.absolutePath);
     let match = featureRegex.exec(content);
     if (!match) {
@@ -106,7 +114,7 @@ class BddReader {
         id: (steps.length + 1).toString(),
         keyword,
         parentKeyword: lastParentKeyword,
-        type: this.determineStepType(keyword, lastParentKeyword),
+        type: this.determineStepType(keyword, stepText, lastParentKeyword),
         stepText,
       });
     }
@@ -114,7 +122,14 @@ class BddReader {
     return steps;
   }
 
-  private determineStepType(keyword: StepKeyword, parentKeyword?: ParentKeyWord): StepType {
+  private determineStepType(keyword: StepKeyword, stepText: string, parentKeyword?: ParentKeyWord): StepType {
+    if (REGEX.DESIGN_CLASS.test(stepText) || REGEX.STATE.test(stepText)) return StepType.STATE;
+    if (REGEX.TRANSITION.test(stepText)) return StepType.TRANSITION;
+    if (REGEX.GENERATED_HOOK.test(stepText)) return StepType.ACTION_HOOK;
+    if (REGEX.ASSERTION.test(stepText)) return StepType.ASSERTION;
+    if ((keyword === "When" || parentKeyword === "When") && REGEX.CLEAN_HOOK.test(stepText)) return StepType.ACTION_HOOK;
+    if (REGEX.CLEAN_ASSERTION.test(stepText)) return StepType.ASSERTION;
+
     switch (keyword) {
       case "Given":
       case "Then":

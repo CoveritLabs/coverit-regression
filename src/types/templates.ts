@@ -10,6 +10,7 @@ import type {
   DesignClassMetadata,
   GeneratedStateClassMetadata,
   GeneratedTransitionClassMetadata,
+  InlineCodeMetadata,
   LocatorMetadata,
   RegistryMetadata,
   StateMetadata,
@@ -22,6 +23,8 @@ export type {
   DesignClassMetadata,
   GeneratedStateClassMetadata,
   GeneratedTransitionClassMetadata,
+  InlineCodeEntry,
+  InlineCodeMetadata,
   LocatorMetadata,
   OverwritableMetadata,
   RegistryClassEntry,
@@ -42,16 +45,18 @@ export interface TemplateRenderContext {
 
 export interface TemplateRenderHelpers {
   ts(value: unknown): string;
+  indent(value: string, spaces: number): string;
 }
 
 export interface TemplateMetadata {
   stateInfo: Record<string, StateMetadata>;
   transitionInfo: Record<string, TransitionMetadata>;
-  assertionInfo: Record<string, AssertionMetadata>;
+  assertionInfo: AssertionMetadata;
   actionHookInfo: Record<string, ActionHookMetadata>;
   designClassInfo: DesignClassMetadata;
   locators: LocatorMetadata;
   registry: RegistryMetadata;
   stateClasses: GeneratedStateClassMetadata[];
   transitionClasses: GeneratedTransitionClassMetadata[];
+  inlineCode: InlineCodeMetadata;
 }

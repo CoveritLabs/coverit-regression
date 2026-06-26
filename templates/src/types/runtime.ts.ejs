@@ -61,6 +61,8 @@ export interface HealingResult {
   message: string;
 }
 
+export type AssertionResultCategory = "assertion" | "hook" | "designClass";
+
 export interface AssertionResult {
   name: string;
   passed: boolean;
@@ -68,6 +70,7 @@ export interface AssertionResult {
   message: string;
   details?: string;
   healingInfo?: HealingInfo;
+  category?: AssertionResultCategory;
   bddStep?: {
     type: string;
     id: string;

@@ -12,7 +12,7 @@ const artifactPaths = getArtifactPaths(config, getCoveritRunId());
 
 export default defineConfig({
   testDir: "./tests",
-  timeout: 30_000,
+  timeout: 120_000,
   retries: 0,
   outputDir: artifactPaths.playwrightResults,
   reporter: [["list"], ["html", { outputFolder: artifactPaths.playwrightReport, open: "never" }]],

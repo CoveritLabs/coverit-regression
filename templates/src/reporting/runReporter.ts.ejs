@@ -110,7 +110,10 @@ export class RunReporter {
       keyword: report.stepKeyword,
       text: report.stepText,
     };
+    const category = result.category ?? this.categoryForBddStepType(bddStep.type);
     await this.event("assertion.result", {
+      category,
+      title: this.titleForAssertionResult(category, result),
       stepId: bddStep.id,
       stepLabel: bddStep.label ?? report.label,
       stepType: bddStep.type,
@@ -294,5 +297,21 @@ export class RunReporter {
       logger.warn("Artifacts", `Could not resolve scenario log path. ${(error as Error).message}`);
       return undefined;
     }
+  }
+
+  private categoryForBddStepType(stepType?: string): "assertion" | "hook" | "designClass" | "basic" {
+    const normalized = stepType?.toUpperCase();
+    if (normalized === "ASSERTION") return "assertion";
+    if (normalized === "ACTION_HOOK") return "hook";
+    if (normalized === "DESIGN_CLASS") return "designClass";
+    return "basic";
+  }
+
+  private titleForAssertionResult(category: string, result: AssertionResult): string {
+    const outcome = result.passed ? "passed" : result.severity === "warning" ? "warning" : "failed";
+    if (category === "designClass") return `Design class ${outcome}`;
+    if (category === "hook") return `Hook ${outcome}`;
+    if (category === "assertion") return `Assertion ${outcome}`;
+    return `Step ${outcome}`;
   }
 }

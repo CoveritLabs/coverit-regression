@@ -3,6 +3,7 @@ import { Page } from "@playwright/test";
 import { failed, passed } from "@/core/assertionResult";
 import { createLocator, resolveLocatorInfo } from "@/core/locatorResolver";
 import { assertionFunctions, designFunctions } from "@/extensions";
+import { generatedAssertionFunctions, generatedDesignFunctions } from "@/extensions/generatedInlineCode";
 import { HealingEngine } from "@/healing/healingEngine";
 import {
   AssertionResult,
@@ -70,17 +71,17 @@ export class DesignClassRuntime {
     args?: Record<string, unknown>,
   ): Promise<AssertionResult> {
     if (operation.type === "set") {
-      this.store.set(operation.key, await this.resolveValue(operation.value, page));
+      this.store.set(operation.key, await this.resolveValue(operation.value, page, args));
       return passed(`Design Operation: ${operationId}`, `Set "${operation.key}".`, "blocking", this.consumeHealingInfo());
     }
 
     if (operation.type === "append") {
-      this.store.append(operation.key, await this.resolveValue(operation.value, page));
+      this.store.append(operation.key, await this.resolveValue(operation.value, page, args));
       return passed(`Design Operation: ${operationId}`, `Appended "${operation.key}".`, "blocking", this.consumeHealingInfo());
     }
 
     if (operation.type === "putMap") {
-      this.store.putMap(operation.key, String(await this.resolveValue(operation.mapKey, page)), await this.resolveValue(operation.value, page));
+      this.store.putMap(operation.key, String(await this.resolveValue(operation.mapKey, page, args)), await this.resolveValue(operation.value, page, args));
       return passed(`Design Operation: ${operationId}`, `Updated map "${operation.key}".`, "blocking", this.consumeHealingInfo());
     }
 
@@ -93,7 +94,7 @@ export class DesignClassRuntime {
         : failed(`Design Assertion: ${operationId}`, expression, operation.severity ?? "blocking", undefined, this.consumeHealingInfo());
     }
 
-    const fn = designFunctions[operation.functionId];
+    const fn = this.designFunction(operation.functionId);
     if (!fn) throw new Error(`Design function "${operation.functionId}" is not registered.`);
     const value = await fn(this.functionContext(page), operation.args ?? args);
     if (operation.assignTo) this.store.set(operation.assignTo, value);
@@ -101,7 +102,7 @@ export class DesignClassRuntime {
   }
 
   async runAssertionFunction(functionId: string, page: Page, args?: Record<string, unknown>): Promise<AssertionResult> {
-    const fn = assertionFunctions[functionId];
+    const fn = this.assertionFunction(functionId);
     if (!fn) return failed("Assertion Function", `Assertion function "${functionId}" is not registered.`);
     const result = await fn(
       {
@@ -117,23 +118,43 @@ export class DesignClassRuntime {
       : failed(`Assertion Function: ${functionId}`, result.message, result.severity ?? "blocking", JSON.stringify(result.details));
   }
 
-  private async resolveValue(spec: DesignStoreValueSpec, page: Page): Promise<unknown> {
+  async runDesignFunction(functionId: string, page: Page, args?: Record<string, unknown>): Promise<AssertionResult> {
+    const fn = this.designFunction(functionId);
+    if (!fn) return failed("Design Function", `Design function "${functionId}" is not registered.`);
+    await fn(this.functionContext(page), args);
+    return passed(`Design Function: ${functionId}`, `Called function "${functionId}".`);
+  }
+
+  private async resolveValue(spec: DesignStoreValueSpec, page: Page, args?: Record<string, unknown>): Promise<unknown> {
     if ("from" in spec) return this.extract(spec.from, page);
     if ("literal" in spec) return spec.literal;
+    if ("source" in spec) {
+      if (spec.source === "element") return this.readElementStoreValue(spec, page);
+      if (spec.source === "store") return this.store.get(spec.path);
+      if (spec.source === "arg" || spec.source === "context" || spec.source === "env") return args?.[spec.path];
+    }
     if ("expressionId" in spec) {
       const expression = this.definition.expressions?.[spec.expressionId]?.expression;
       if (!expression) throw new Error(`Unknown expression "${spec.expressionId}".`);
       return this.evaluate(expression);
     }
     if ("functionId" in spec) {
-      const fn = designFunctions[spec.functionId];
+      const fn = this.designFunction(spec.functionId);
       if (!fn) throw new Error(`Design function "${spec.functionId}" is not registered.`);
       return fn(this.functionContext(page), spec.args);
     }
 
     const value: Record<string, unknown> = {};
-    for (const [key, child] of Object.entries(spec.fields)) value[key] = await this.resolveValue(child, page);
+    for (const [key, child] of Object.entries(spec.fields)) value[key] = await this.resolveValue(child, page, args);
     return value;
+  }
+
+  private async readElementStoreValue(spec: Extract<DesignStoreValueSpec, { source: "element" }>, page: Page): Promise<unknown> {
+    const locator = page.locator(spec.selector).first();
+    const attribute = spec.attribute ?? "text";
+    if (attribute === "text") return locator.textContent();
+    if (attribute === "value") return locator.inputValue();
+    return locator.getAttribute(attribute);
   }
 
   private async extractValue(definition: DesignExtractDefinition, page: Page): Promise<unknown> {
@@ -234,5 +255,13 @@ export class DesignClassRuntime {
       extracts: {},
       evaluate: (expression: string, context?: Record<string, unknown>) => this.evaluate(expression, context),
     };
+  }
+
+  private designFunction(functionId: string) {
+    return generatedDesignFunctions[functionId] ?? designFunctions[functionId];
+  }
+
+  private assertionFunction(functionId: string) {
+    return generatedAssertionFunctions[functionId] ?? assertionFunctions[functionId];
   }
 }

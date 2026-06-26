@@ -9,7 +9,7 @@ export interface RegistryClassEntry extends RegistryIdEntry {
 export interface GeneratedRegistry {
   states: Record<string, RegistryClassEntry>;
   transitions: Record<string, RegistryClassEntry>;
-  assertions: Record<string, RegistryIdEntry>;
+  assertions: RegistryIdEntry;
   actionHooks: Record<string, RegistryIdEntry>;
   designClass: RegistryIdEntry;
 }

@@ -5,7 +5,7 @@
 import { PATHS } from "@constants/paths";
 import {
   ActionHookStepMapping,
-  AssertionStepMapping,
+  AssertionMappingFile,
   BaseStepMapping,
   DesignClassMapping,
   FrameworkMappingFileSet,
@@ -31,15 +31,15 @@ class FrameworkMappingReader {
     const mapping = {
       states: this.readJson<Record<string, StateStepMapping>>("states.json"),
       transitions: this.readJson<Record<string, RawTransitionStepMapping>>("transitions.json"),
-      assertions: this.readJson<Record<string, AssertionStepMapping>>("assertions.json"),
-      actionHooks: this.readJson<Record<string, ActionHookStepMapping>>("action-hooks.json"),
+      assertions: this.readJson<AssertionMappingFile>("assertions.json"),
+      actionHooks: this.readOptionalJson<Record<string, ActionHookStepMapping>>("action-hooks.json", {}),
       designClass: this.readJson<DesignClassMapping>("design-class.json"),
     };
 
     logger.info(
       `[Framework Mapping Reader] Loaded ${Object.keys(mapping.states).length} state(s), ` +
         `${Object.keys(mapping.transitions).length} transition(s), ` +
-        `${Object.keys(mapping.assertions).length} assertion(s), ` +
+        `${Object.keys(mapping.assertions.elements ?? {}).length} assertion element locator(s), ` +
         `${Object.keys(mapping.actionHooks).length} action hook(s), ` +
         `and design class "${mapping.designClass.id}".`,
     );
@@ -55,7 +55,7 @@ class FrameworkMappingReader {
     return {
       states: this.sortMappings(Object.values(mapping.states)),
       transitions: this.sortMappings(Object.values(mapping.transitions).map((transition) => this.normalizeTransition(transition))),
-      assertions: this.sortMappings(Object.values(mapping.assertions)),
+      assertions: mapping.assertions,
       actionHooks: this.sortMappings(Object.values(mapping.actionHooks)),
       designClass: mapping.designClass,
     };
@@ -67,6 +67,12 @@ class FrameworkMappingReader {
       throw new Error(`[Framework Mapping Reader] Missing required mapping file: ${filePath}`);
     }
 
+    return JSON.parse(FileHandler.readFile(filePath)) as T;
+  }
+
+  private readOptionalJson<T>(fileName: string, fallback: T): T {
+    const filePath = FileHandler.join(this.mappingPath, fileName);
+    if (!FileHandler.exists(filePath)) return fallback;
     return JSON.parse(FileHandler.readFile(filePath)) as T;
   }
 

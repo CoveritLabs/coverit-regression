@@ -18,6 +18,7 @@ class BddOutputPayloadValidator {
       assertions: this.optionalRecord(payload, "assertions") ?? {},
       action_hooks: this.optionalRecord(payload, "action_hooks") ?? {},
       design_class: this.optionalRecord(payload, "design_class"),
+      design_classes: this.optionalRecord(payload, "design_classes"),
       flow_ids: this.optionalStringArray(payload, "flow_ids"),
       regression_codebase_id: this.optionalString(payload, "regression_codebase_id"),
       codegen_config: this.optionalRecord(payload, "codegen_config") as BddOutputPayload["codegen_config"],

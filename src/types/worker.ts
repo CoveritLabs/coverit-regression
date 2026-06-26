@@ -14,6 +14,7 @@ export interface BddOutputPayload {
   assertions: Record<string, unknown>;
   action_hooks: Record<string, unknown>;
   design_class?: Record<string, unknown>;
+  design_classes?: Record<string, unknown>;
   flow_ids?: string[];
   regression_codebase_id?: string;
   codegen_config?: WorkerCodegenConfig;
