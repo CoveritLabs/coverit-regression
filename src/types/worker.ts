@@ -8,19 +8,29 @@ import type { GeneratorOptions } from "@/types/generator";
 export interface BddOutputPayload {
   status?: string;
   session_id: string;
-  feature_name: string;
-  feature_text: string;
+  features: BddOutputFeature[];
   states: Record<string, unknown>;
   transitions: Record<string, unknown>;
   assertions: Record<string, unknown>;
   action_hooks: Record<string, unknown>;
   design_class?: Record<string, unknown>;
+  design_classes?: Record<string, unknown>;
+  flow_ids?: string[];
+  regression_codebase_id?: string;
+  codegen_config?: WorkerCodegenConfig;
+}
+
+export interface BddOutputFeature {
+  id?: string;
+  feature_name: string;
+  feature_text: string;
+  scenario_names?: string[];
 }
 
 export interface MaterializedBddInput {
   jobRootPath: string;
   inputPath: string;
-  featurePath: string;
+  featurePaths: string[];
   mappingPath: string;
 }
 
@@ -31,7 +41,13 @@ export interface CrawlSessionCodegenContext {
   sessionCodegenConfig?: WorkerCodegenConfig;
   targetApplication: {
     id: string;
+    name?: string;
     baseUrl: string;
+  };
+  creator: {
+    id: string;
+    email: string;
+    name: string;
   };
   regressionCodebase?: {
     id?: string;
@@ -43,17 +59,23 @@ export interface CrawlSessionCodegenContext {
 
 export type WorkerCodegenConfig = Partial<Pick<CodegenConfig, "codegenBranch" | "prTargetBranch" | "prTitle" | "prBody" | "prDraft">> & {
   commitMessage?: string;
+  commitAuthorName?: string;
+  commitAuthorEmail?: string;
   outputPath?: string;
   logToFile?: boolean;
-  coveritApiBaseUrl?: string;
   localArtifactsEnabled?: boolean;
   artifactRoot?: string;
   healingEnabled?: boolean;
   healingThreshold?: number;
+  githubActionsEnabled?: boolean;
 };
 
 export interface CrawlSessionRepository {
   findCodegenContext(sessionId: string): Promise<CrawlSessionCodegenContext>;
+  findRegressionCodebase?(
+    targetApplicationId: string,
+    regressionCodebaseId: string,
+  ): Promise<CrawlSessionCodegenContext["regressionCodebase"]>;
   close?(): Promise<void>;
 }
 

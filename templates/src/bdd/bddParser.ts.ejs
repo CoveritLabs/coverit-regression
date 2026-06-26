@@ -1,29 +1,54 @@
 import fs from "fs";
 
 import { BDD_KEYWORDS, BDD_PATTERNS } from "@/constants/bddPatterns";
-import { BddKeyword, HookTiming, RuntimeFeaturePlan, RuntimeScenarioPlan, RuntimeStepPlan } from "@/types";
+import { ASSERTION_INFO, DESIGN_CLASS_INFO } from "@/metadata";
+import { BddKeyword, RuntimeFeaturePlan, RuntimeScenarioPlan, RuntimeStepPlan } from "@/types";
+
+const CLEAN_ASSERTION = /^(?:assert|call)\b/;
+const CLEAN_ACTION = /^(?:wait|wait-for-url|wait-for-load-state|refresh|reload|go-back|go-forward|click|dblclick|fill|clear|hover|select|check|uncheck|press|focus|blur|assign|append|prepend|merge|remove|pop|increment|decrement|toggle|delete|put|call)\b/;
+const CLEAN_CALL = /^call '((?:\\'|[^'])+)'$/;
 
 export class BddParser {
   parse(featurePath: string): RuntimeFeaturePlan {
     const raw = fs.readFileSync(featurePath, "utf8");
     const scenarios: RuntimeScenarioPlan[] = [];
     let featureName = "";
+    let featureMarks: string[] = [];
+    let pendingMarks: string[] = [];
     let currentScenario: RuntimeScenarioPlan | undefined;
     let currentParent: { type: "STATE" | "TRANSITION"; id: string } | undefined;
+    let lastStateId: string | undefined;
+    let lastTransitionId: string | undefined;
+    let pendingPreHooks: RuntimeStepPlan[] = [];
 
     for (const rawLine of raw.split(/\r?\n/)) {
       const line = rawLine.trim();
       if (!line || line.startsWith("#")) continue;
 
+      if (line.startsWith("@")) {
+        pendingMarks.push(...this.extractMarks(line));
+        continue;
+      }
+
       if (line.startsWith("Feature:")) {
         featureName = line.replace("Feature:", "").trim();
+        featureMarks = [...new Set(pendingMarks)];
+        pendingMarks = [];
         continue;
       }
 
       if (line.startsWith("Scenario:") || line.startsWith("Scenario Outline:")) {
+        pendingPreHooks = [];
         if (currentScenario) scenarios.push(currentScenario);
-        currentScenario = { name: line.replace(/Scenario(?: Outline)?:/, "").trim(), steps: [] };
+        currentScenario = {
+          name: line.replace(/Scenario(?: Outline)?:/, "").trim(),
+          marks: [...new Set([...featureMarks, ...pendingMarks])],
+          steps: [],
+        };
+        pendingMarks = [];
         currentParent = undefined;
+        lastStateId = undefined;
+        lastTransitionId = undefined;
         continue;
       }
 
@@ -41,44 +66,54 @@ export class BddParser {
 
       const stateId = stepText.match(BDD_PATTERNS.state)?.[1];
       if (stateId) {
+        pendingPreHooks = [];
         currentScenario.steps.push({ type: "STATE", id: stateId, keyword, rawText: line });
         currentParent = { type: "STATE", id: stateId };
+        lastStateId = stateId;
         continue;
       }
 
       const transitionId = stepText.match(BDD_PATTERNS.transition)?.[1];
       if (transitionId) {
-        currentScenario.steps.push({ type: "TRANSITION", id: transitionId, keyword, rawText: line });
+        for (const pendingHook of pendingPreHooks) currentScenario.steps.push({ ...pendingHook, parentId: transitionId });
+        pendingPreHooks = [];
+        currentScenario.steps.push({ type: "TRANSITION", id: transitionId, keyword, rawText: line, contextId: lastStateId });
         currentParent = { type: "TRANSITION", id: transitionId };
+        lastTransitionId = transitionId;
         continue;
       }
 
-      if ((keyword === "And" || keyword === "But") && currentParent?.type === "STATE") {
-        const assertionId = stepText.match(BDD_PATTERNS.assertion)?.[1];
-        if (assertionId) {
-          currentScenario.steps.push({
-            type: "ASSERTION",
-            id: assertionId,
-            keyword,
-            rawText: line,
-            parentId: currentParent.id,
-          });
+      if (this.isCleanAction(stepText)) {
+        const hook: RuntimeStepPlan = {
+          type: "ACTION_HOOK",
+          id: stepText,
+          keyword,
+          rawText: line,
+          hookTiming: "post",
+          contextId: lastStateId,
+        };
+
+        if (keyword === "When") {
+          pendingPreHooks.push({ ...hook, hookTiming: "pre" });
+        } else if (currentParent?.type === "TRANSITION") {
+          currentScenario.steps.push({ ...hook, parentId: currentParent.id });
+        } else if (lastTransitionId) {
+          currentScenario.steps.push({ ...hook, parentId: lastTransitionId });
+        } else {
+          pendingPreHooks.push({ ...hook, hookTiming: "pre" });
         }
         continue;
       }
 
-      if ((keyword === "And" || keyword === "But") && currentParent?.type === "TRANSITION") {
-        const hook = stepText.match(BDD_PATTERNS.hook);
-        if (hook) {
-          currentScenario.steps.push({
-            type: "ACTION_HOOK",
-            id: hook[2],
-            keyword,
-            rawText: line,
-            parentId: currentParent.id,
-            hookTiming: this.toHookTiming(hook[1]),
-          });
-        }
+      if ((keyword === "And" || keyword === "But") && currentParent?.type === "STATE" && CLEAN_ASSERTION.test(stepText)) {
+        currentScenario.steps.push({
+          type: "ASSERTION",
+          id: stepText,
+          keyword,
+          rawText: line,
+          parentId: currentParent.id,
+          contextId: currentParent.id,
+        });
       }
     }
 
@@ -86,13 +121,20 @@ export class BddParser {
     return { name: featureName, filePath: featurePath, scenarios };
   }
 
-  private extractKeyword(line: string): BddKeyword | undefined {
-    return BDD_KEYWORDS.find((keyword) => line.startsWith(`${keyword} `)) as
-      | BddKeyword
-      | undefined;
+  private isCleanAction(stepText: string): boolean {
+    const call = stepText.match(CLEAN_CALL)?.[1]?.replace(/\\'/g, "'");
+    if (call) return Boolean(DESIGN_CLASS_INFO.functions?.[call]) && !ASSERTION_INFO.functions?.[call];
+    return CLEAN_ACTION.test(stepText) && !CLEAN_ASSERTION.test(stepText);
   }
 
-  private toHookTiming(value: string): HookTiming {
-    return value === "before" ? "pre" : "post";
+  private extractMarks(line: string): string[] {
+    return line
+      .split(/\s+/)
+      .map((mark) => mark.trim())
+      .filter((mark) => /^@[A-Za-z0-9_-]+$/.test(mark));
+  }
+
+  private extractKeyword(line: string): BddKeyword | undefined {
+    return BDD_KEYWORDS.find((keyword) => line.startsWith(`${keyword} `)) as BddKeyword | undefined;
   }
 }

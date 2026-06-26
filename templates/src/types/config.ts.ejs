@@ -1,7 +1,14 @@
+export interface ApiReportingConfig {
+  enabled: boolean;
+  baseUrl: string;
+  apiKey?: string;
+  disabledReason?: string;
+}
+
 export interface CoveritConfig {
   application: { baseUrl: string };
   run: { name: string; applicationId: string; versionId?: string };
-  api: { enabled: boolean; baseUrl: string; apiKey: string };
-  reporting: { localArtifactsEnabled: boolean; artifactRoot: string; apiDisabledReason?: string };
+  apiReporting: ApiReportingConfig;
+  reporting: { localArtifactsEnabled: boolean; artifactRoot: string };
   healing: { enabled: boolean; threshold: number };
 }

@@ -69,6 +69,11 @@
       "description": "Generated Playwright regression specs."
     },
     {
+      "path": "scripts/**",
+      "mode": "static",
+      "description": "Generated CI helper scripts."
+    },
+    {
       "path": "package.json",
       "mode": "static",
       "description": "Generated framework package manifest."
@@ -77,6 +82,16 @@
       "path": "playwright.config.ts",
       "mode": "static",
       "description": "Generated framework Playwright config."
+    },
+    {
+      "path": ".env.example",
+      "mode": "static",
+      "description": "Documented environment variables for generated regression runs."
+    },
+    {
+      "path": "src/extensions/generatedInlineCode.ts",
+      "mode": "static",
+      "description": "Generated inline functions materialized from framework mapping JSON."
     },
     {
       "path": "src/extensions/*.ts",
@@ -89,6 +104,12 @@
       "mode": "user-extension",
       "createIfMissing": true,
       "description": "Project configuration can be edited after generation."
+    },
+    {
+      "path": ".github/workflows/**",
+      "mode": "user-extension",
+      "createIfMissing": true,
+      "description": "GitHub Actions workflow for running generated regression tests."
     }
 	]
 }

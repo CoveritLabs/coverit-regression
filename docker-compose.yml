@@ -1,0 +1,30 @@
+# Copyright (c) 2026 CoverIt Labs. All Rights Reserved.
+# Proprietary and confidential. Unauthorized use is strictly prohibited.
+# See LICENSE file in the project root for full license information.
+
+name: coverit
+
+services:
+  regression-worker:
+    image: ghcr.io/coveritlabs/coverit-regression:${REGRESSION_TAG:-dev}
+    build:
+      context: ${REGRESSION_DIR:-.}
+      dockerfile: Dockerfile
+    pull_policy: always
+    container_name: coverit-regression
+    env_file:
+      - path: ${REGRESSION_DIR:-.}/.env
+        required: false
+    environment:
+      DATABASE_URL: ${REGRESSION_DATABASE_URL:-postgresql://postgres:postgres@db:5432/coverit}
+      REDIS_HOST: ${REGRESSION_REDIS_HOST:-redis}
+      REDIS_PORT: ${REGRESSION_REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REGRESSION_REDIS_PASSWORD:-}
+      WORKER_CONCURRENCY: ${REGRESSION_WORKER_CONCURRENCY:-1}
+      LOG_LEVEL: ${REGRESSION_LOG_LEVEL:-info}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

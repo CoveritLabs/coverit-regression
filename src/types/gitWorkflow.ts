@@ -12,10 +12,11 @@ export interface RegressionCodebase {
 
 export interface CodegenConfig {
   codegenBranch?: string;
-  prTargetBranch: string;
+  prTargetBranch?: string;
   prTitle?: string;
   prBody?: string;
   prDraft?: boolean;
+  githubActionsEnabled?: boolean;
 }
 
 export interface GitWorkflowOptions {
@@ -23,6 +24,13 @@ export interface GitWorkflowOptions {
   regressionCodebase: RegressionCodebase;
   codegenConfig: CodegenConfig;
   commitMessage?: string;
+  commitAuthorName?: string;
+  commitAuthorEmail?: string;
+}
+
+export interface GitCommitAuthor {
+  name: string;
+  email: string;
 }
 
 export interface PullRequestRequest {
@@ -32,7 +40,7 @@ export interface PullRequestRequest {
   headBranch: string;
   baseBranch: string;
   isDraft: boolean;
-  apiKey: string;
+  apiKey?: string;
 }
 
 export interface PullRequestResponse {
@@ -52,6 +60,8 @@ export interface PreparedGitWorkflow {
   branchName: string;
   repositoryUrl: string;
   repositoryPath: string;
-  apiKey: string;
-  targetBranch: string;
+  apiKey?: string;
+  targetBranch?: string;
+  baseBranch: string;
+  configuredBranch: boolean;
 }

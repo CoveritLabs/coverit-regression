@@ -4,10 +4,7 @@
 
 import ts from "typescript";
 
-export interface MergeResult {
-  merged?: string;
-  reason?: string;
-}
+import type { ClassMemberMergeResult } from "@/types/planner";
 
 interface ParsedClass {
   sourceFile: ts.SourceFile;
@@ -18,7 +15,7 @@ interface ParsedClass {
 }
 
 class TypeScriptClassMemberMerger {
-  merge(previousGenerated: string, currentEdited: string, nextGenerated: string): MergeResult {
+  merge(previousGenerated: string, currentEdited: string, nextGenerated: string): ClassMemberMergeResult {
     const previousClass = this.parseSingleClass(previousGenerated);
     const currentClass = this.parseSingleClass(currentEdited);
     const nextClass = this.parseSingleClass(nextGenerated);
@@ -104,4 +101,3 @@ class TypeScriptClassMemberMerger {
 }
 
 export default TypeScriptClassMemberMerger;
-

@@ -10,10 +10,12 @@ export interface RuntimeStepPlan {
   rawText: string;
   hookTiming?: HookTiming;
   parentId?: string;
+  contextId?: string;
 }
 
 export interface RuntimeScenarioPlan {
   name: string;
+  marks?: string[];
   designClassId?: string;
   designClassStep?: {
     type: "DESIGN_CLASS";
@@ -27,5 +29,6 @@ export interface RuntimeScenarioPlan {
 export interface RuntimeFeaturePlan {
   name: string;
   filePath: string;
+  marks?: string[];
   scenarios: RuntimeScenarioPlan[];
 }

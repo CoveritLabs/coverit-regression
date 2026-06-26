@@ -14,6 +14,9 @@ const features = new BddLoader().loadAll(featuresDir);
 const reporters = new Map<string, RunReporter>();
 const scenarioNameOccurrences = new Map<string, number>();
 let scenarioIndex = 0;
+const featureRegex = compileOptionalRegex(process.env.FEATURE_REGEX, "FEATURE_REGEX");
+const scenarioRegex = compileOptionalRegex(process.env.SCENARIO_REGEX, "SCENARIO_REGEX");
+const requiredMarks = parseMarks(process.env.MARKS);
 
 test.afterEach(async ({}, testInfo) => {
   const reporter = reporters.get(testInfo.testId);
@@ -27,9 +30,9 @@ test.afterAll(async () => {
   await new RunReporter().uploadArtifacts("run", { maxDurationMs: 25_000 });
 });
 
-for (const feature of features) {
+for (const feature of features.filter((candidate) => matchesFeature(candidate))) {
   test.describe(feature.name, () => {
-    for (const scenario of feature.scenarios) {
+    for (const scenario of feature.scenarios.filter((candidate) => matchesScenario(candidate))) {
       const currentScenarioIndex = ++scenarioIndex;
       const scenarioNameCount = (scenarioNameOccurrences.get(scenario.name) ?? 0) + 1;
       scenarioNameOccurrences.set(scenario.name, scenarioNameCount);
@@ -41,4 +44,34 @@ for (const feature of features) {
       });
     }
   });
+}
+
+function compileOptionalRegex(value: string | undefined, name: string): RegExp | undefined {
+  if (!value?.trim()) return undefined;
+  try {
+    return new RegExp(value, "i");
+  } catch (error) {
+    throw new Error(`${name} is not a valid regular expression: ${(error as Error).message}`);
+  }
+}
+
+function parseMarks(value: string | undefined): string[] {
+  if (!value?.trim()) return [];
+  return value
+    .split(",")
+    .map((mark) => mark.trim())
+    .filter(Boolean)
+    .map((mark) => (mark.startsWith("@") ? mark : `@${mark}`));
+}
+
+function matchesFeature(feature: (typeof features)[number]): boolean {
+  if (!featureRegex) return true;
+  return featureRegex.test(feature.name) || featureRegex.test(feature.filePath);
+}
+
+function matchesScenario(scenario: (typeof features)[number]["scenarios"][number]): boolean {
+  if (scenarioRegex && !scenarioRegex.test(scenario.name)) return false;
+  if (requiredMarks.length === 0) return true;
+  const marks = new Set(scenario.marks ?? []);
+  return requiredMarks.every((mark) => marks.has(mark));
 }

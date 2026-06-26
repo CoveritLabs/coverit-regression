@@ -37,6 +37,8 @@ export interface UserAssertionFunctionDefinition {
 export type DesignStoreValueSpec =
   | { from: string }
   | { literal: unknown }
+  | { source: "element"; selector: string; token?: string; attribute?: string }
+  | { source: "store" | "arg" | "context" | "env"; path: string }
   | { expressionId: string }
   | { functionId: string; args?: Record<string, unknown> }
   | { fields: Record<string, DesignStoreValueSpec> };
@@ -86,4 +88,5 @@ export interface DesignClassInfo {
   functions?: Record<string, DesignFunctionDefinition>;
   assertionFunctions?: Record<string, UserAssertionFunctionDefinition>;
   operations?: Record<string, DesignOperationDefinition>;
+  overwritable?: boolean;
 }

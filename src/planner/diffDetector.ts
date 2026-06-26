@@ -5,12 +5,13 @@
 import { diagnostics } from "@/diagnostics/diagnostics";
 import { GenerationRecord } from "@/types/generationRecord";
 import { FileOperation, FileOperationKind, FileOwnershipMode } from "@/types/files";
+import type { StructuredMergeContext, StructuredMergeDecision } from "@/types/planner";
 import FileHandler from "@utils/files";
 import { hashText } from "./fileHash";
-import TypeScriptClassMemberMerger from "./typeScriptClassMemberMerger";
+import StructuredMergeCoordinator from "./structuredMerge/structuredMergeCoordinator";
 
 class DiffDetector {
-  private readonly classMemberMerger = new TypeScriptClassMemberMerger();
+  private readonly structuredMergeCoordinator = new StructuredMergeCoordinator();
 
   detect(
     relativePath: string,
@@ -46,6 +47,17 @@ class DiffDetector {
       };
     }
 
+    const context: StructuredMergeContext = {
+      relativePath,
+      sourcePath,
+      targetPath,
+      currentContent,
+      nextContent,
+    };
+
+    const structuredMerge = this.tryStructuredMerge(context);
+    if (structuredMerge) return structuredMerge;
+
     const previousRecord = record.files[relativePath];
     const previousGenerated = record.snapshots[relativePath];
 
@@ -75,7 +87,10 @@ class DiffDetector {
       };
     }
 
-    const merge = this.tryMerge(relativePath, previousGenerated, currentContent, nextContent);
+    const merge = this.tryMerge({
+      ...context,
+      previousGeneratedContent: previousGenerated,
+    });
     if (merge) {
       if (hashText(merge) === hashText(currentContent)) {
         return {
@@ -115,19 +130,63 @@ class DiffDetector {
     };
   }
 
-  private tryMerge(
-    relativePath: string,
-    previousGenerated: string,
-    currentContent: string,
-    nextContent: string,
-  ): string | undefined {
-    if (!relativePath.endsWith(".ts")) return undefined;
-    const result = this.classMemberMerger.merge(previousGenerated, currentContent, nextContent);
+  private tryMerge(context: StructuredMergeContext): string | undefined {
+    const result = this.structuredMergeCoordinator.merge(context);
+    if (!result.applicable) return undefined;
     if (result.merged !== undefined) return result.merged;
-    diagnostics.warning("CUSTOM_CODE_MERGE_SKIPPED", result.reason ?? "Custom code could not be merged.", relativePath);
+    diagnostics.warning(
+      result.diagnosticCode ?? "CUSTOM_CODE_MERGE_SKIPPED",
+      result.reason ?? "Custom code could not be merged.",
+      context.relativePath,
+    );
     return undefined;
+  }
+
+  private tryStructuredMerge(context: StructuredMergeContext): FileOperation | undefined {
+    const result = this.structuredMergeCoordinator.merge(context);
+    if (!result.applicable) return undefined;
+    if (!result.merged) return this.operationForFailedStructuredMerge(context, result);
+    return this.operationForMergedContent(context, result.merged, result.successReason ?? "Merged structured generated content.");
+  }
+
+  private operationForFailedStructuredMerge(
+    context: StructuredMergeContext,
+    result: StructuredMergeDecision,
+  ): FileOperation | undefined {
+    diagnostics.warning(
+      result.diagnosticCode ?? "STRUCTURED_MERGE_SKIPPED",
+      result.reason ?? "Structured merge could not be merged.",
+      context.targetPath,
+    );
+    if (!result.preserveOnFailure) return undefined;
+    return {
+      kind: FileOperationKind.Preserve,
+      mode: FileOwnershipMode.Dynamic,
+      relativePath: context.relativePath,
+      sourcePath: context.sourcePath,
+      targetPath: context.targetPath,
+      generatedContent: context.nextContent,
+      reason: result.reason ?? "Structured merge could not be merged safely; preserving existing file.",
+    };
+  }
+
+  private operationForMergedContent(
+    context: StructuredMergeContext,
+    mergedContent: string,
+    reason: string,
+  ): FileOperation {
+    const unchanged = hashText(context.currentContent) === hashText(mergedContent);
+    return {
+      kind: unchanged ? FileOperationKind.Unchanged : FileOperationKind.Update,
+      mode: FileOwnershipMode.Dynamic,
+      relativePath: context.relativePath,
+      sourcePath: context.sourcePath,
+      targetPath: context.targetPath,
+      content: mergedContent,
+      generatedContent: mergedContent,
+      reason: unchanged ? "Target file already contains merged generated content." : reason,
+    };
   }
 }
 
 export default DiffDetector;
-

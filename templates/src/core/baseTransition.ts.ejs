@@ -3,22 +3,20 @@ import { Page } from "@playwright/test";
 import { failed, passed } from "@/core/assertionResult";
 import { createLocator, resolveLocatorInfo } from "@/core/locatorResolver";
 import { HealingEngine } from "@/healing/healingEngine";
-import { AssertionResult, HealingContext, HealingResult, TransitionInfo } from "@/types";
+import { AssertionResult, HealingContext, HealingResult, TransitionActionInfo, TransitionInfo } from "@/types";
 
 export abstract class BaseTransition {
   readonly id: string;
-  readonly dbId: string;
   readonly label: string;
   readonly className: string;
-  readonly action: TransitionInfo["action"];
+  readonly actions: TransitionActionInfo[];
   private healingEngine = new HealingEngine();
 
   protected constructor(readonly definition: TransitionInfo) {
     this.id = definition.id;
-    this.dbId = definition.dbId;
     this.label = definition.label;
     this.className = definition.className;
-    this.action = definition.action;
+    this.actions = this.normalizeActions(definition);
   }
 
   injectHealingEngine(healingEngine: HealingEngine): void {
@@ -27,30 +25,38 @@ export abstract class BaseTransition {
 
   async perform(page: Page, context: Partial<HealingContext> = {}): Promise<AssertionResult[]> {
     const results: AssertionResult[] = [];
-    try {
-      const healing = await this.execute(page, context);
-      results.push(passed("Execute Action", `Executed ${this.action.type} for "${this.id}"`, "blocking", healing.healed ? {
-        wasHealed: true,
-        originalSelector: healing.originalSelector,
-        healedSelector: healing.healedSelector,
-        score: healing.score,
-        reason: healing.reason,
-        breakdown: healing.breakdown,
-      } : undefined));
-    } catch (error) {
-      results.push(failed("Execute Action", (error as Error).message));
+
+    if (this.actions.length === 0) {
+      results.push(failed("Execute Action", `Transition "${this.id}" has no actions.`));
+      return results;
     }
+
+    for (const [index, action] of this.actions.entries()) {
+      try {
+        const healing = await this.execute(action, page, context);
+        results.push(passed(
+          this.resultName(index),
+          `Executed ${action.type} action ${index + 1}/${this.actions.length} for "${this.id}"`,
+          "blocking",
+          this.healingInfo(healing),
+        ));
+      } catch (error) {
+        results.push(failed(this.resultName(index), (error as Error).message));
+        break;
+      }
+    }
+
     return results;
   }
 
-  private async execute(page: Page, context: Partial<HealingContext>): Promise<HealingResult> {
-    if (this.action.type === "navigate") {
-      if (!this.action.url) throw new Error(`Transition "${this.id}" is missing navigation url.`);
-      await page.goto(this.action.url, { waitUntil: "networkidle" });
-      return { healed: false, originalSelector: this.action.url, message: `Navigated to "${this.action.url}".` };
+  private async execute(action: TransitionActionInfo, page: Page, context: Partial<HealingContext>): Promise<HealingResult> {
+    if (action.type === "navigate") {
+      if (!action.url) throw new Error(`Transition "${this.id}" is missing navigation url.`);
+      await page.goto(action.url, { waitUntil: "networkidle" });
+      return { healed: false, originalSelector: action.url, message: `Navigated to "${action.url}".` };
     }
 
-    const locatorInfo = resolveLocatorInfo(this.action.locator, this.action.stateId, this.action.locatorKey);
+    const locatorInfo = resolveLocatorInfo(action.locator, action.stateId, action.locatorKey);
     if (!locatorInfo) throw new Error(`Transition "${this.id}" is missing locator information.`);
 
     const healing = await this.healingEngine.findElement(page, locatorInfo, {
@@ -59,21 +65,44 @@ export abstract class BaseTransition {
       stepType: "TRANSITION",
       stepId: this.id,
       stepLabel: this.label,
-      action: this.action.type,
-      stateId: this.action.stateId,
-      locatorKey: this.action.locatorKey,
+      action: action.type,
+      stateId: action.stateId,
+      locatorKey: action.locatorKey,
     });
     const locator = healing.healed && healing.healedSelector
       ? page.locator(healing.healedSelector).first()
       : createLocator(page, locatorInfo).first();
 
-    if (this.action.type === "click") await locator.click();
-    else if (this.action.type === "fill") await locator.fill(this.action.value ?? "");
-    else if (this.action.type === "hover") await locator.hover();
-    else if (this.action.type === "select") await locator.selectOption(this.action.value ?? "");
-    else throw new Error(`Unsupported transition action "${this.action.type}".`);
+    if (action.type === "click") await locator.click();
+    else if (action.type === "fill") await locator.fill(action.value ?? "");
+    else if (action.type === "hover") await locator.hover();
+    else if (action.type === "select") await locator.selectOption(action.value ?? "");
+    else throw new Error(`Unsupported transition action "${action.type}".`);
 
     await page.waitForLoadState("networkidle").catch(() => undefined);
     return healing;
+  }
+
+  private normalizeActions(definition: TransitionInfo): TransitionActionInfo[] {
+    if (definition.actions) return definition.actions;
+    if (Array.isArray(definition.action)) return definition.action;
+    if (definition.action) return [definition.action];
+    return [];
+  }
+
+  private resultName(index: number): string {
+    return this.actions.length === 1 ? "Execute Action" : `Execute Action ${index + 1}`;
+  }
+
+  private healingInfo(healing: HealingResult): AssertionResult["healingInfo"] {
+    if (!healing.healed) return undefined;
+    return {
+      wasHealed: true,
+      originalSelector: healing.originalSelector,
+      healedSelector: healing.healedSelector,
+      score: healing.score,
+      reason: healing.reason,
+      breakdown: healing.breakdown,
+    };
   }
 }

@@ -15,9 +15,9 @@ export interface GeneratedProjectConfig {
   applicationBaseUrl?: string;
   applicationId?: string;
   versionId?: string;
-  coveritApiBaseUrl?: string;
   localArtifactsEnabled?: boolean;
   artifactRoot?: string;
   healingEnabled?: boolean;
   healingThreshold?: number;
+  githubActionsEnabled?: boolean;
 }

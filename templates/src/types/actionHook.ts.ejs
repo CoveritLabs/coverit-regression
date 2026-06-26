@@ -3,22 +3,23 @@ export type HookTiming = "pre" | "post";
 export type ActionHookDefinition =
   | {
       type: "element-interaction";
-      action: "click" | "fill" | "hover" | "select" | "check" | "uncheck";
+      action: string;
       stateId?: string;
       locatorKey?: string;
       locator?: import("@/types/state").LocatorInfo;
-      value?: string;
+      value?: unknown;
     }
-  | { type: "utility"; action: "wait" | "refresh" | "reload"; durationMs?: number }
+  | { type: "utility"; action: string; durationMs?: unknown; url?: unknown; loadState?: string }
   | { type: "extract"; extractId: string; storeKey: string }
+  | { type: "hook-function"; functionId: string; args?: Record<string, unknown> }
   | { type: "design-operation"; operationId: string; args?: Record<string, unknown> };
 
 export interface ActionHookInfo {
   id: string;
-  dbId: string;
   label: string;
   timing?: HookTiming;
   targetId?: string;
   contextId?: string;
   definition: ActionHookDefinition;
+  overwritable?: boolean;
 }

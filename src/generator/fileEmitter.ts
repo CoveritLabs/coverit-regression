@@ -21,6 +21,7 @@ class FileEmitter {
     const emitted: FileEntry[] = [];
 
     for (const template of templates) {
+      if (this.shouldSkipTemplate(template.relativePath, context)) continue;
       emitted.push(...(await this.materializeTemplate(template, context)));
     }
 
@@ -103,6 +104,12 @@ class FileEmitter {
 
   private isEjsTemplate(relativePath: string): boolean {
     return relativePath.endsWith(".ejs");
+  }
+
+  private shouldSkipTemplate(relativePath: string, context: TemplateRenderContext | {}): boolean {
+    if (!("config" in context)) return false;
+    if (context.config.githubActionsEnabled !== false) return false;
+    return relativePath.startsWith(".github/") || relativePath.startsWith("scripts/");
   }
 
   private isStateRepeatTemplate(relativePath: string): boolean {

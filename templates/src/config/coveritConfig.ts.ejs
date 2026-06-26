@@ -1,7 +1,9 @@
 import fs from "fs";
 import path from "path";
 
-import { CoveritConfig } from "@/types";
+import { ApiReportingConfig, CoveritConfig } from "@/types";
+
+type CoveritConfigFile = Omit<CoveritConfig, "apiReporting">;
 
 export function loadCoveritConfig(configPath = "coverit.config.json"): CoveritConfig {
   const absolutePath = path.resolve(configPath);
@@ -10,7 +12,8 @@ export function loadCoveritConfig(configPath = "coverit.config.json"): CoveritCo
   }
 
   try {
-    return resolveConfig(JSON.parse(fs.readFileSync(absolutePath, "utf8")) as CoveritConfig);
+    loadDotEnv(path.join(path.dirname(absolutePath), ".env"));
+    return resolveConfig(JSON.parse(fs.readFileSync(absolutePath, "utf8")) as CoveritConfigFile);
   } catch (error) {
     throw new Error(`CoverIt config at "${absolutePath}" is invalid: ${(error as Error).message}`);
   }
@@ -26,33 +29,73 @@ export function getCoveritRunId(): string {
   return generated;
 }
 
-function resolveConfig(config: CoveritConfig): CoveritConfig {
+function resolveConfig(config: CoveritConfigFile): CoveritConfig {
   if (!config.application?.baseUrl) throw new Error("coverit.config.json must define application.baseUrl.");
-  if (!config.api) throw new Error("coverit.config.json must define api settings.");
   if (!config.reporting) throw new Error("coverit.config.json must define reporting settings.");
   if (!config.reporting.artifactRoot) throw new Error("coverit.config.json must define reporting.artifactRoot.");
   if (!config.healing) throw new Error("coverit.config.json must define healing settings.");
-  const apiDisabledReason = apiDisabledReasonFor(config);
-  const apiEnabled = Boolean(config.api.enabled && !apiDisabledReason);
-  const baseUrl = config.api.baseUrl ? config.api.baseUrl.replace(/\/+$/, "") : "";
+  const run = { ...config.run, name: config.run?.name?.trim() || "Run", applicationId: config.run?.applicationId || "", versionId: config.run?.versionId || undefined };
   return {
     ...config,
-    run: { ...config.run, name: config.run?.name?.trim() || "Run", applicationId: config.run?.applicationId || "", versionId: config.run?.versionId || undefined },
-    api: { ...config.api, enabled: apiEnabled, baseUrl },
-    reporting: { ...config.reporting, apiDisabledReason },
+    run,
+    apiReporting: resolveApiReporting(run.applicationId),
   };
 }
 
-function apiDisabledReasonFor(config: CoveritConfig): string | undefined {
-  if (!config.api?.enabled) return undefined;
-  if (!config.run?.applicationId) {
+function resolveApiReporting(applicationId: string): ApiReportingConfig {
+  const requested = parseBooleanEnv("COVERIT_API_REPORTING_ENABLED");
+  const baseUrl = (trimEnv("COVERIT_API_BASE_URL") ?? "").replace(/\/+$/, "");
+  const apiKey = trimEnv("COVERIT_API_KEY");
+  const disabledReason = apiDisabledReasonFor({ requested, applicationId, baseUrl, apiKey });
+  return {
+    enabled: Boolean(requested && !disabledReason),
+    baseUrl,
+    apiKey,
+    disabledReason,
+  };
+}
+
+function apiDisabledReasonFor(input: { requested: boolean; applicationId: string; baseUrl: string; apiKey?: string }): string | undefined {
+  const { requested, applicationId, baseUrl, apiKey } = input;
+  if (!requested) {
+    return "API reporting disabled: set COVERIT_API_REPORTING_ENABLED=true in the environment to enable CoverIt API sending.";
+  }
+  if (!applicationId) {
     return "API reporting disabled: coverit.config.json is missing run.applicationId. Set it to the target application id from CoverIt.";
   }
-  if (!config.api.baseUrl) {
-    return "API reporting disabled: coverit.config.json is missing api.baseUrl.";
+  if (!baseUrl) {
+    return "API reporting disabled: set COVERIT_API_BASE_URL.";
   }
-  if (!config.api.apiKey) {
-    return "API reporting disabled: coverit.config.json is missing api.apiKey. Rotate or copy the target application API key from CoverIt.";
+  if (!apiKey) {
+    return "API reporting disabled: COVERIT_API_KEY is not set. Store it in .env locally or as a GitHub Actions secret.";
   }
   return undefined;
+}
+
+function loadDotEnv(filePath: string): void {
+  if (!fs.existsSync(filePath)) return;
+  for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex <= 0) continue;
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const value = unquoteEnvValue(trimmed.slice(separatorIndex + 1).trim());
+    if (key && process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
+function unquoteEnvValue(value: string): string {
+  const quote = value[0];
+  if ((quote === "\"" || quote === "'") && value.endsWith(quote)) return value.slice(1, -1);
+  return value;
+}
+
+function trimEnv(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value ? value : undefined;
+}
+
+function parseBooleanEnv(name: string): boolean {
+  return ["1", "true", "yes", "on"].includes(process.env[name]?.trim().toLowerCase() ?? "");
 }

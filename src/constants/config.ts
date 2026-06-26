@@ -15,6 +15,8 @@ export const CLI_DEFAULTS = {
 export const GIT_WORKFLOW_DEFAULTS = {
   branchPrefix: "codegen",
   commitMessage: "chore: update generated regression assets",
+  commitAuthorName: "github-actions[bot]",
+  commitAuthorEmail: "41898282+github-actions[bot]@users.noreply.github.com",
   pullRequestTitle: "chore: update generated regression assets",
   pullRequestBodyIntro: "Automated regression code generation update.",
   pullRequestBodyHeading: "Changed files:",

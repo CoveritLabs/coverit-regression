@@ -11,6 +11,8 @@ import { materializeBddInput } from "./bddInputMaterializer";
 import { buildWorkerCliOptions } from "./workerOptionsBuilder";
 import BddOutputPayloadValidator from "@/validate/bddOutputPayloadValidator";
 import type {
+  BddOutputPayload,
+  CrawlSessionCodegenContext,
   CrawlSessionRepository,
   GeneratorLike,
   GitWorkflowRunnerLike,
@@ -28,6 +30,7 @@ export interface ProcessBddOutputJobOptions {
 export interface ProcessBddOutputJobResult {
   success: true;
   sessionId: string;
+  flowIds: string[];
   inputPath: string;
   outputPath: string;
   git: GitWorkflowResult;
@@ -52,7 +55,8 @@ export async function processBddOutputJob(
 
   const materializedInput = await (dependencies.materializeInput ?? materializeBddInput)(payload, { jobId: job.jobId });
   const context = await dependencies.sessionRepository.findCodegenContext(payload.session_id);
-  const options = (dependencies.buildOptions ?? buildWorkerCliOptions)(context, materializedInput);
+  const generationContext = await applyPayloadOverrides(context, payload, dependencies.sessionRepository);
+  const options = (dependencies.buildOptions ?? buildWorkerCliOptions)(generationContext, materializedInput, PATHS.ROOT);
 
   configureLogger(dependencies, options);
 
@@ -73,10 +77,41 @@ export async function processBddOutputJob(
   return {
     success: true,
     sessionId: payload.session_id,
+    flowIds: payload.flow_ids ?? [],
     inputPath: materializedInput.inputPath,
     outputPath: options.generatorOptions.outputPath,
     git,
   };
+}
+
+async function applyPayloadOverrides(
+  context: CrawlSessionCodegenContext,
+  payload: BddOutputPayload,
+  sessionRepository: CrawlSessionRepository,
+): Promise<CrawlSessionCodegenContext> {
+  const regressionCodebase = payload.regression_codebase_id
+    ? await resolveRegressionCodebaseOverride(context, payload.regression_codebase_id, sessionRepository)
+    : context.regressionCodebase;
+
+  return {
+    ...context,
+    regressionCodebase,
+    sessionCodegenConfig: {
+      ...(context.sessionCodegenConfig ?? {}),
+      ...(payload.codegen_config ?? {}),
+    },
+  };
+}
+
+async function resolveRegressionCodebaseOverride(
+  context: CrawlSessionCodegenContext,
+  regressionCodebaseId: string,
+  sessionRepository: CrawlSessionRepository,
+): Promise<CrawlSessionCodegenContext["regressionCodebase"]> {
+  if (!sessionRepository.findRegressionCodebase) {
+    throw new Error("[Worker] Regression codebase override is not supported by this repository.");
+  }
+  return sessionRepository.findRegressionCodebase(context.targetApplication.id, regressionCodebaseId);
 }
 
 function configureLogger(dependencies: ProcessBddOutputJobDependencies, options: WorkerCliOptions): void {

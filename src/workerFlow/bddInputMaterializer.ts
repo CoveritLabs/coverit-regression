@@ -4,32 +4,23 @@
 
 import { randomUUID } from "crypto";
 import fs from "fs/promises";
+import os from "os";
 import path from "path";
 
 import { PATHS } from "@constants/paths";
+import { preprocessBddFeatures } from "@/bdd/bddFeaturePreprocessor";
+import { DEFAULT_DESIGN_CLASS, normalizeBddOutputPayload } from "@/bdd/bddPayloadNormalizer";
 import type { BddOutputPayload, MaterializedBddInput } from "@/types/worker";
-
-const DEFAULT_DESIGN_CLASS = {
-  id: "scenarioData",
-  label: "Scenario Data",
-  description: "Single scenario data store for generated regression flows.",
-  store: {},
-  extracts: {},
-  expressions: {},
-  functions: {},
-  assertionFunctions: {},
-  operations: {},
-};
 
 export async function materializeBddInput(
   payload: BddOutputPayload,
   options: { jobId?: string; baseDir?: string } = {},
 ): Promise<MaterializedBddInput> {
-  const baseDir = options.baseDir ?? path.join(PATHS.ROOT, "tmp");
+  const baseDir = options.baseDir ?? (await resolveWritableTmpDir());
   await fs.mkdir(baseDir, { recursive: true });
 
   const uniquePart = sanitizePathSegment(options.jobId || payload.session_id || randomUUID());
-  const jobRootPath = path.join(baseDir, `job-input-${uniquePart}-${Date.now()}`);
+  const jobRootPath = path.join(baseDir, `generated-${uniquePart}-${Date.now()}`);
   const inputPath = path.join(jobRootPath, "input");
   const featuresPath = path.join(inputPath, "features");
   const mappingPath = path.join(inputPath, "framework-mapping");
@@ -37,16 +28,46 @@ export async function materializeBddInput(
   await fs.mkdir(featuresPath, { recursive: true });
   await fs.mkdir(mappingPath, { recursive: true });
 
-  const featurePath = path.join(featuresPath, `${safeFeatureName(payload.feature_name)}.feature`);
-  await fs.writeFile(featurePath, payload.feature_text, "utf8");
+  const normalizedPayload = normalizeBddOutputPayload(payload);
+  const featurePaths = await writeFeatures(featuresPath, preprocessBddFeatures(payload));
 
-  await writeJson(path.join(mappingPath, "states.json"), payload.states);
-  await writeJson(path.join(mappingPath, "transitions.json"), payload.transitions);
-  await writeJson(path.join(mappingPath, "assertions.json"), payload.assertions);
-  await writeJson(path.join(mappingPath, "action-hooks.json"), payload.action_hooks);
-  await writeJson(path.join(mappingPath, "design-class.json"), payload.design_class ?? DEFAULT_DESIGN_CLASS);
+  await writeJson(path.join(mappingPath, "states.json"), normalizedPayload.states);
+  await writeJson(path.join(mappingPath, "transitions.json"), normalizedPayload.transitions);
+  await writeJson(path.join(mappingPath, "assertions.json"), normalizedPayload.assertions);
+  await writeJson(path.join(mappingPath, "design-class.json"), normalizedPayload.design_class ?? DEFAULT_DESIGN_CLASS);
 
-  return { jobRootPath, inputPath, featurePath, mappingPath };
+  return { jobRootPath, inputPath, featurePaths, mappingPath };
+}
+
+async function writeFeatures(
+  featuresPath: string,
+  features: BddOutputPayload["features"],
+): Promise<string[]> {
+  const usedFileNames = new Set<string>();
+  const featurePaths: string[] = [];
+
+  for (const feature of features) {
+    const fileName = uniqueFeatureFileName(feature.feature_name, usedFileNames);
+    const featurePath = path.join(featuresPath, fileName);
+    await fs.writeFile(featurePath, feature.feature_text, "utf8");
+    featurePaths.push(featurePath);
+  }
+
+  return featurePaths;
+}
+
+function uniqueFeatureFileName(featureName: string, usedFileNames: Set<string>): string {
+  const baseName = safeFeatureName(featureName);
+  let fileName = `${baseName}.feature`;
+  let suffix = 2;
+
+  while (usedFileNames.has(fileName.toLowerCase())) {
+    fileName = `${baseName}_${suffix}.feature`;
+    suffix += 1;
+  }
+
+  usedFileNames.add(fileName.toLowerCase());
+  return fileName;
 }
 
 function safeFeatureName(featureName: string): string {
@@ -64,4 +85,32 @@ function sanitizePathSegment(value: string): string {
 
 async function writeJson(filePath: string, value: unknown): Promise<void> {
   await fs.writeFile(filePath, JSON.stringify(value, null, 2), "utf8");
+}
+
+export async function resolveWritableTmpDir(
+  primaryPath: string = PATHS.TMP,
+  fallbackPath: string = path.join(os.tmpdir(), "coverit-regression"),
+  assertWritable: (directoryPath: string) => Promise<void> = assertWritableDirectory,
+): Promise<string> {
+  try {
+    await fs.mkdir(primaryPath, { recursive: true });
+    await assertWritable(primaryPath);
+    return primaryPath;
+  } catch (error) {
+    if (!isPermissionError(error)) throw error;
+    await fs.mkdir(fallbackPath, { recursive: true });
+    await assertWritable(fallbackPath);
+    return fallbackPath;
+  }
+}
+
+async function assertWritableDirectory(directoryPath: string): Promise<void> {
+  const probePath = path.join(directoryPath, `.coverit-write-probe-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  await fs.mkdir(probePath);
+  await fs.rm(probePath, { recursive: true, force: true });
+}
+
+function isPermissionError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "EACCES" || code === "EPERM" || code === "EROFS";
 }

@@ -1,12 +1,13 @@
 import { Page, Locator } from "@playwright/test";
 
 import { STATE_LOCATORS } from "@/metadata";
-import { LocatorInfo } from "@/types";
+import { LocatorInfo, StateLocatorMap } from "@/types";
 
 export function resolveLocatorInfo(locator?: LocatorInfo, stateId?: string, locatorKey?: string): LocatorInfo | undefined {
   if (locator) return locator;
   if (!stateId || !locatorKey) return undefined;
-  return (STATE_LOCATORS as Record<string, Record<string, LocatorInfo>>)[stateId]?.[locatorKey];
+  const candidate = (STATE_LOCATORS as Record<string, StateLocatorMap>)[stateId]?.[locatorKey];
+  return typeof candidate === "object" && candidate !== null ? candidate : undefined;
 }
 
 export function createLocator(page: Page, locator: LocatorInfo): Locator {

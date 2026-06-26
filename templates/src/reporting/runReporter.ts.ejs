@@ -16,20 +16,21 @@ export class RunReporter {
   private readonly logger: Logger;
   private scenarioStartedAt?: string;
 
-  constructor(identity: Partial<RunIdentity> = {}, config = loadCoveritConfig()) {
+  constructor(identity: Partial<RunIdentity> = {}, config?: ReturnType<typeof loadCoveritConfig>) {
+    config = config ?? this.loadConfigOrFallback();
     const runId = identity.runId ?? getCoveritRunId();
-    logger.configure({ logFilePath: getArtifactPaths(config, runId).runLog });
-    this.apiClient = config.api.enabled ? new CoveritApiClient(config) : undefined;
-    this.artifactStore = config.reporting.localArtifactsEnabled ? new LocalArtifactStore(config, runId) : undefined;
-    const scenarioLogPath = this.artifactStore && identity.scenarioName ? this.artifactStore.getScenarioLogPath({
-      scenarioName: identity.scenarioName,
-      scenarioIndex: identity.scenarioIndex,
-      scenarioArtifactName: identity.scenarioArtifactName,
-    }) : undefined;
+    try {
+      logger.configure({ logFilePath: getArtifactPaths(config, runId).runLog });
+    } catch (error) {
+      logger.warn("Artifacts", `Could not configure run log. ${(error as Error).message}`);
+    }
+    this.apiClient = this.createApiClient(config);
+    this.artifactStore = this.createArtifactStore(config, runId);
+    const scenarioLogPath = this.getScenarioLogPath(identity);
     this.logger = logger.forScenario({ logFilePath: scenarioLogPath });
-    if (config.reporting.apiDisabledReason && !RunReporter.warnedApiDisabledReasons.has(config.reporting.apiDisabledReason)) {
-      RunReporter.warnedApiDisabledReasons.add(config.reporting.apiDisabledReason);
-      logger.warn("CoverIt API", config.reporting.apiDisabledReason);
+    if (config.apiReporting.disabledReason && !RunReporter.warnedApiDisabledReasons.has(config.apiReporting.disabledReason)) {
+      RunReporter.warnedApiDisabledReasons.add(config.apiReporting.disabledReason);
+      logger.warn("CoverIt API", config.apiReporting.disabledReason);
     }
     this.identity = {
       runId,
@@ -70,13 +71,15 @@ export class RunReporter {
         },
       } : {}),
     } : {};
-    this.artifactStore?.saveScenarioInfo({
-      featureName: this.identity.featureName,
-      scenarioName: this.identity.scenarioName,
-      scenarioIndex: this.identity.scenarioIndex,
-      scenarioArtifactName: this.identity.scenarioArtifactName,
-      status,
-      ...timing,
+    this.safeLocalArtifact("save scenario info", () => {
+      this.artifactStore?.saveScenarioInfo({
+        featureName: this.identity.featureName,
+        scenarioName: this.identity.scenarioName,
+        scenarioIndex: this.identity.scenarioIndex,
+        scenarioArtifactName: this.identity.scenarioArtifactName,
+        status,
+        ...timing,
+      });
     });
     await this.event("scenario.status", { status, ...timing, ...designClassPayload });
   }
@@ -107,7 +110,10 @@ export class RunReporter {
       keyword: report.stepKeyword,
       text: report.stepText,
     };
+    const category = result.category ?? this.categoryForBddStepType(bddStep.type);
     await this.event("assertion.result", {
+      category,
+      title: this.titleForAssertionResult(category, result),
       stepId: bddStep.id,
       stepLabel: bddStep.label ?? report.label,
       stepType: bddStep.type,
@@ -125,41 +131,53 @@ export class RunReporter {
   }
 
   async log(message: string, level: "info" | "warning" | "error" = "info"): Promise<void> {
-    if (this.identity.scenarioName || this.identity.scenarioArtifactName || this.identity.scenarioIndex) this.artifactStore?.appendScenarioLog({
-      scenarioName: this.identity.scenarioName,
-      scenarioIndex: this.identity.scenarioIndex,
-      scenarioArtifactName: this.identity.scenarioArtifactName,
-      level,
-      message,
+    if (this.identity.scenarioName || this.identity.scenarioArtifactName || this.identity.scenarioIndex) this.safeLocalArtifact("append scenario log", () => {
+      this.artifactStore?.appendScenarioLog({
+        scenarioName: this.identity.scenarioName,
+        scenarioIndex: this.identity.scenarioIndex,
+        scenarioArtifactName: this.identity.scenarioArtifactName,
+        level,
+        message,
+      });
     });
     await this.event("log", { level, message });
   }
 
   async failure(failure: unknown): Promise<void> {
-    this.artifactStore?.saveFailure(failure);
+    this.safeLocalArtifact("save failure", () => this.artifactStore?.saveFailure(failure));
     await this.event("failure", failure);
   }
 
   async saveSummary(summary: RunSummary): Promise<void> {
-    this.artifactStore?.saveSummary(summary);
+    this.safeLocalArtifact("save summary", () => this.artifactStore?.saveSummary(summary));
     await this.sendCompletion(summary);
   }
 
   async captureFailureArtifacts(page: Page, error: unknown): Promise<void> {
     if (!this.artifactStore) return;
-    await this.artifactStore.savePlaywrightFailureArtifacts({
-      featureName: this.identity.featureName,
-      scenarioName: this.identity.scenarioName,
-      scenarioIndex: this.identity.scenarioIndex,
-      scenarioArtifactName: this.identity.scenarioArtifactName,
-      error: error instanceof Error ? error : new Error(String(error)),
-      screenshot: () => page.screenshot({ fullPage: true }),
-    });
+    try {
+      await this.artifactStore.savePlaywrightFailureArtifacts({
+        featureName: this.identity.featureName,
+        scenarioName: this.identity.scenarioName,
+        scenarioIndex: this.identity.scenarioIndex,
+        scenarioArtifactName: this.identity.scenarioArtifactName,
+        error: error instanceof Error ? error : new Error(String(error)),
+        screenshot: () => page.screenshot({ fullPage: true }),
+      });
+    } catch (artifactError) {
+      this.logger.warn("Artifacts", `Could not capture failure artifacts. ${(artifactError as Error).message}`);
+    }
   }
 
   async uploadArtifacts(scope: "all" | "run" | "scenario" = "all", options: { maxDurationMs?: number } = {}): Promise<void> {
     if (!this.apiClient || !this.artifactStore) return;
-    const artifacts = this.artifactStore.listArtifacts(scope, this.identity.scenarioIndex, this.identity.scenarioArtifactName, [...RunReporter.scenarioArtifactMappings.values()]);
+    let artifacts: ReturnType<LocalArtifactStore["listArtifacts"]> = [];
+    try {
+      artifacts = this.artifactStore.listArtifacts(scope, this.identity.scenarioIndex, this.identity.scenarioArtifactName, [...RunReporter.scenarioArtifactMappings.values()]);
+    } catch (error) {
+      this.logger.warn("Artifacts", `Could not list artifacts for upload. ${(error as Error).message}`);
+      return;
+    }
     if (artifacts.length === 0) return;
 
     const startedAt = Date.now();
@@ -194,7 +212,7 @@ export class RunReporter {
       ...this.identity,
       payload,
     };
-    this.artifactStore?.appendEvent(event);
+    this.safeLocalArtifact("append event", () => this.artifactStore?.appendEvent(event));
     await this.sendEvent(event);
   }
 
@@ -214,5 +232,86 @@ export class RunReporter {
     } catch (error) {
       this.logger.warn("CoverIt API", `Could not send run completion. ${(error as Error).message}`);
     }
+  }
+
+  private safeLocalArtifact(operation: string, action: () => void): void {
+    try {
+      action();
+    } catch (error) {
+      this.logger.warn("Artifacts", `Could not ${operation}. ${(error as Error).message}`);
+    }
+  }
+
+  private loadConfigOrFallback(): ReturnType<typeof loadCoveritConfig> {
+    try {
+      return loadCoveritConfig();
+    } catch (error) {
+      logger.warn("CoverIt config", `Could not load CoverIt config. Reporting will continue with local defaults. ${(error as Error).message}`);
+      return {
+        application: { baseUrl: process.env.COVERIT_APP_BASE_URL ?? "http://localhost:3000" },
+        run: { name: "Run", applicationId: "", versionId: undefined },
+        apiReporting: {
+          enabled: false,
+          baseUrl: "",
+          apiKey: undefined,
+          disabledReason: "API reporting disabled: CoverIt config could not be loaded.",
+        },
+        reporting: {
+          localArtifactsEnabled: true,
+          artifactRoot: "artifacts",
+        },
+        healing: { enabled: true, threshold: 0.55 },
+      };
+    }
+  }
+
+  private createApiClient(config: ReturnType<typeof loadCoveritConfig>): CoveritApiClient | undefined {
+    if (!config.apiReporting.enabled) return undefined;
+    try {
+      return new CoveritApiClient(config.apiReporting);
+    } catch (error) {
+      logger.warn("CoverIt API", `Could not initialize API client. ${(error as Error).message}`);
+      return undefined;
+    }
+  }
+
+  private createArtifactStore(config: ReturnType<typeof loadCoveritConfig>, runId: string): LocalArtifactStore | undefined {
+    if (!config.reporting.localArtifactsEnabled) return undefined;
+    try {
+      return new LocalArtifactStore(config, runId);
+    } catch (error) {
+      logger.warn("Artifacts", `Could not initialize local artifact store. ${(error as Error).message}`);
+      return undefined;
+    }
+  }
+
+  private getScenarioLogPath(identity: Partial<RunIdentity>): string | undefined {
+    if (!this.artifactStore || !identity.scenarioName) return undefined;
+    try {
+      return this.artifactStore.getScenarioLogPath({
+        scenarioName: identity.scenarioName,
+        scenarioIndex: identity.scenarioIndex,
+        scenarioArtifactName: identity.scenarioArtifactName,
+      });
+    } catch (error) {
+      logger.warn("Artifacts", `Could not resolve scenario log path. ${(error as Error).message}`);
+      return undefined;
+    }
+  }
+
+  private categoryForBddStepType(stepType?: string): "assertion" | "hook" | "designClass" | "basic" {
+    const normalized = stepType?.toUpperCase();
+    if (normalized === "ASSERTION") return "assertion";
+    if (normalized === "ACTION_HOOK") return "hook";
+    if (normalized === "DESIGN_CLASS") return "designClass";
+    return "basic";
+  }
+
+  private titleForAssertionResult(category: string, result: AssertionResult): string {
+    const outcome = result.passed ? "passed" : result.severity === "warning" ? "warning" : "failed";
+    if (category === "designClass") return `Design class ${outcome}`;
+    if (category === "hook") return `Hook ${outcome}`;
+    if (category === "assertion") return `Assertion ${outcome}`;
+    return `Step ${outcome}`;
   }
 }
