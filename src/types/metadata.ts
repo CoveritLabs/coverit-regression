@@ -4,9 +4,11 @@
 
 import {
   ActionHookDefinition,
+  AssertionElementLookup,
   AssertionDefinition,
   AssertionSeverity,
   DesignClassMapping,
+  UserAssertionFunctionDefinition,
   HookTiming,
   Locator,
   StateDomMapping,
@@ -37,13 +39,8 @@ export interface TransitionMetadata extends OverwritableMetadata {
 }
 
 export interface AssertionMetadata extends OverwritableMetadata {
-  id: string;
-  dbId?: string;
-  label: string;
-  targetId?: string;
-  contextId?: string;
-  severity?: AssertionSeverity;
-  definition: AssertionDefinition;
+  elements?: Record<string, AssertionElementLookup>;
+  functions?: Record<string, UserAssertionFunctionDefinition>;
 }
 
 export interface ActionHookMetadata extends OverwritableMetadata {
@@ -84,7 +81,7 @@ export interface TransitionLocatorMetadata extends TransitionActionLocatorMetada
 export interface RegistryMetadata {
   states: Record<string, RegistryClassEntry>;
   transitions: Record<string, RegistryClassEntry>;
-  assertions: Record<string, RegistryIdEntry>;
+  assertions: RegistryIdEntry;
   actionHooks: Record<string, RegistryIdEntry>;
   designClass: RegistryIdEntry;
 }
@@ -105,4 +102,17 @@ export interface GeneratedStateClassMetadata {
 export interface GeneratedTransitionClassMetadata {
   className: string;
   transitionId: string;
+}
+
+export interface InlineCodeEntry {
+  id: string;
+  body: string;
+  declaredFunctionName?: string;
+}
+
+export interface InlineCodeMetadata {
+  imports: string[];
+  designFunctions: InlineCodeEntry[];
+  assertionFunctions: InlineCodeEntry[];
+  hookFunctions: InlineCodeEntry[];
 }

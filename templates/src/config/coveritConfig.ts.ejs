@@ -1,7 +1,9 @@
 import fs from "fs";
 import path from "path";
 
-import { CoveritConfig } from "@/types";
+import { ApiReportingConfig, CoveritConfig } from "@/types";
+
+type CoveritConfigFile = Omit<CoveritConfig, "apiReporting">;
 
 export function loadCoveritConfig(configPath = "coverit.config.json"): CoveritConfig {
   const absolutePath = path.resolve(configPath);
@@ -11,7 +13,7 @@ export function loadCoveritConfig(configPath = "coverit.config.json"): CoveritCo
 
   try {
     loadDotEnv(path.join(path.dirname(absolutePath), ".env"));
-    return resolveConfig(JSON.parse(fs.readFileSync(absolutePath, "utf8")) as CoveritConfig);
+    return resolveConfig(JSON.parse(fs.readFileSync(absolutePath, "utf8")) as CoveritConfigFile);
   } catch (error) {
     throw new Error(`CoverIt config at "${absolutePath}" is invalid: ${(error as Error).message}`);
   }
@@ -27,41 +29,44 @@ export function getCoveritRunId(): string {
   return generated;
 }
 
-function resolveConfig(config: CoveritConfig): CoveritConfig {
+function resolveConfig(config: CoveritConfigFile): CoveritConfig {
   if (!config.application?.baseUrl) throw new Error("coverit.config.json must define application.baseUrl.");
-  if (!config.api) throw new Error("coverit.config.json must define api settings.");
   if (!config.reporting) throw new Error("coverit.config.json must define reporting settings.");
   if (!config.reporting.artifactRoot) throw new Error("coverit.config.json must define reporting.artifactRoot.");
   if (!config.healing) throw new Error("coverit.config.json must define healing settings.");
-  const apiKey = trimEnv("COVERIT_API_KEY");
-  const apiReportingEnabled = parseBooleanEnv("COVERIT_API_REPORTING_ENABLED");
-  const baseUrl = (trimEnv("COVERIT_API_BASE_URL") ?? config.api.baseUrl ?? "").replace(/\/+$/, "");
-  const resolvedConfig: CoveritConfig = {
-    ...config,
-    api: { ...config.api, baseUrl, apiKey },
-  };
-  const apiDisabledReason = apiDisabledReasonFor(resolvedConfig, apiReportingEnabled);
-  const apiEnabled = Boolean(config.api.enabled && apiReportingEnabled && !apiDisabledReason);
+  const run = { ...config.run, name: config.run?.name?.trim() || "Run", applicationId: config.run?.applicationId || "", versionId: config.run?.versionId || undefined };
   return {
-    ...resolvedConfig,
-    run: { ...config.run, name: config.run?.name?.trim() || "Run", applicationId: config.run?.applicationId || "", versionId: config.run?.versionId || undefined },
-    api: { ...resolvedConfig.api, enabled: apiEnabled },
-    reporting: { ...config.reporting, apiDisabledReason },
+    ...config,
+    run,
+    apiReporting: resolveApiReporting(run.applicationId),
   };
 }
 
-function apiDisabledReasonFor(config: CoveritConfig, apiReportingEnabled: boolean): string | undefined {
-  if (!config.api?.enabled) return undefined;
-  if (!apiReportingEnabled) {
+function resolveApiReporting(applicationId: string): ApiReportingConfig {
+  const requested = parseBooleanEnv("COVERIT_API_REPORTING_ENABLED");
+  const baseUrl = (trimEnv("COVERIT_API_BASE_URL") ?? "").replace(/\/+$/, "");
+  const apiKey = trimEnv("COVERIT_API_KEY");
+  const disabledReason = apiDisabledReasonFor({ requested, applicationId, baseUrl, apiKey });
+  return {
+    enabled: Boolean(requested && !disabledReason),
+    baseUrl,
+    apiKey,
+    disabledReason,
+  };
+}
+
+function apiDisabledReasonFor(input: { requested: boolean; applicationId: string; baseUrl: string; apiKey?: string }): string | undefined {
+  const { requested, applicationId, baseUrl, apiKey } = input;
+  if (!requested) {
     return "API reporting disabled: set COVERIT_API_REPORTING_ENABLED=true in the environment to enable CoverIt API sending.";
   }
-  if (!config.run?.applicationId) {
+  if (!applicationId) {
     return "API reporting disabled: coverit.config.json is missing run.applicationId. Set it to the target application id from CoverIt.";
   }
-  if (!config.api.baseUrl) {
-    return "API reporting disabled: set COVERIT_API_BASE_URL or coverit.config.json api.baseUrl.";
+  if (!baseUrl) {
+    return "API reporting disabled: set COVERIT_API_BASE_URL.";
   }
-  if (!config.api.apiKey) {
+  if (!apiKey) {
     return "API reporting disabled: COVERIT_API_KEY is not set. Store it in .env locally or as a GitHub Actions secret.";
   }
   return undefined;

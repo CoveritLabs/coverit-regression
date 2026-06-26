@@ -41,6 +41,11 @@ export type DesignFunction = (
   args?: Record<string, unknown>,
 ) => Promise<unknown> | unknown;
 
+export type HookFunction = (
+  context: unknown,
+  args?: Record<string, unknown>,
+) => Promise<unknown> | unknown;
+
 export type ExtensionHook = (page: Page) => Promise<void> | void;
 export type StateFactory = (id: string) => BaseGeneratedState;
 export type TransitionFactory = (id: string) => BaseGeneratedTransition;

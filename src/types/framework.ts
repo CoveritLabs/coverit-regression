@@ -52,6 +52,12 @@ export enum DesignOperationType {
   CALL_FUNCTION = "call-function",
 }
 
+export interface InlineCodeBlock {
+  language: "typescript";
+  body: string;
+  imports?: string[];
+}
+
 export interface Locator {
   id?: string;
   className?: string;
@@ -65,7 +71,7 @@ export interface Locator {
 export interface FrameworkMappingFileSet {
   states: Record<string, StateStepMapping>;
   transitions: Record<string, RawTransitionStepMapping>;
-  assertions: Record<string, AssertionStepMapping>;
+  assertions: AssertionMappingFile;
   actionHooks: Record<string, ActionHookStepMapping>;
   designClass: DesignClassMapping;
 }
@@ -73,7 +79,7 @@ export interface FrameworkMappingFileSet {
 export interface GeneratedFrameworkModel {
   states: StateStepMapping[];
   transitions: TransitionStepMapping[];
-  assertions: AssertionStepMapping[];
+  assertions: AssertionMappingFile;
   actionHooks: ActionHookStepMapping[];
   designClass: DesignClassMapping;
 }
@@ -139,47 +145,49 @@ export interface AssertionStepMapping extends BaseStepMapping {
   definition: AssertionDefinition;
 }
 
+export interface AssertionMappingFile {
+  elements?: Record<string, AssertionElementLookup>;
+  functions?: Record<string, UserAssertionFunctionDefinition>;
+}
+
+export interface AssertionElementLookup {
+  stateId: string;
+  locatorKey: string;
+  attribute?: string;
+}
+
 export type AssertionDefinition =
   | ElementAssertionDefinition
+  | VariableAssertionDefinition
   | PageAssertionDefinition
   | StateAssertionDefinition
+  | InlineAssertionDefinition
   | DesignOperationCallDefinition
   | UserAssertionFunctionCallDefinition;
 
-export type ElementAssertionDefinition =
-  | {
-      type: "element";
-      assertion: "text";
-      stateId?: string;
-      locatorKey?: string;
-      locator?: Locator;
-      expectedText: string;
-    }
-  | {
-      type: "element";
-      assertion: "visibility";
-      stateId?: string;
-      locatorKey?: string;
-      locator?: Locator;
-      visible: boolean;
-    }
-  | {
-      type: "element";
-      assertion: "attribute";
-      stateId?: string;
-      locatorKey?: string;
-      locator?: Locator;
-      attributeName: string;
-      expectedValue: string;
-    }
-  | {
-      type: "element";
-      assertion: "value";
-      stateId?: string;
-      locatorKey?: string;
-      locator?: Locator;
-      expectedValue: string;
-    };
+export interface ElementAssertionDefinition {
+  type: "element";
+  assertion: string;
+  stateId?: string;
+  locatorKey?: string;
+  locator?: Locator;
+  expected?: DesignStoreValueSpec | unknown;
+  expectedText?: DesignStoreValueSpec | unknown;
+  expectedValue?: DesignStoreValueSpec | unknown;
+  expectedCount?: DesignStoreValueSpec | unknown;
+  attributeName?: string;
+  visible?: boolean;
+}
+
+export interface VariableAssertionDefinition {
+  type: "variable";
+  assertion: string;
+  target: DesignStoreValueSpec;
+  expected?: DesignStoreValueSpec | unknown;
+  expectedText?: DesignStoreValueSpec | unknown;
+  expectedValue?: DesignStoreValueSpec | unknown;
+  expectedCount?: DesignStoreValueSpec | unknown;
+}
 
 export type PageAssertionDefinition =
   | { type: "page"; assertion: "title"; expectedText: string }
@@ -197,8 +205,14 @@ export interface DesignOperationCallDefinition {
 }
 
 export interface UserAssertionFunctionCallDefinition {
-  type: "user-assertion";
+  type: "user-assertion" | "function";
   functionId: string;
+  args?: Record<string, unknown>;
+}
+
+export interface InlineAssertionDefinition {
+  type: "code";
+  code: InlineCodeBlock;
   args?: Record<string, unknown>;
 }
 
@@ -214,27 +228,43 @@ export type ActionHookDefinition =
   | ElementInteractionHookDefinition
   | UtilityHookDefinition
   | ExtractActionHookDefinition
+  | InlineActionHookDefinition
+  | HookFunctionCallDefinition
   | DesignOperationCallDefinition;
 
 export interface ElementInteractionHookDefinition {
   type: "element-interaction";
-  action: ElementInteractionAction;
+  action: ElementInteractionAction | string;
   stateId?: string;
   locatorKey?: string;
   locator?: Locator;
-  value?: string;
+  value?: DesignStoreValueSpec | unknown;
 }
 
 export interface UtilityHookDefinition {
   type: "utility";
-  action: UtilityHookAction;
-  durationMs?: number;
+  action: UtilityHookAction | string;
+  durationMs?: DesignStoreValueSpec | unknown;
+  url?: DesignStoreValueSpec | unknown;
+  loadState?: string;
 }
 
 export interface ExtractActionHookDefinition {
   type: "extract";
   extractId: string;
   storeKey: string;
+}
+
+export interface InlineActionHookDefinition {
+  type: "code";
+  code: InlineCodeBlock;
+  args?: Record<string, unknown>;
+}
+
+export interface HookFunctionCallDefinition {
+  type: "hook-function";
+  functionId: string;
+  args?: Record<string, unknown>;
 }
 
 export interface DesignClassMapping {
@@ -268,19 +298,22 @@ export interface DesignExtractDefinition {
 }
 
 export interface DesignExpressionDefinition {
-  expression: string;
+  expression?: string;
+  code?: InlineCodeBlock;
   description?: string;
 }
 
 export interface DesignFunctionDefinition {
-  implementationId: string;
+  implementationId?: string;
+  code?: InlineCodeBlock;
   input?: unknown;
   output?: unknown;
   description?: string;
 }
 
 export interface UserAssertionFunctionDefinition {
-  implementationId: string;
+  implementationId?: string;
+  code?: InlineCodeBlock;
   severity?: AssertionSeverity;
   description?: string;
 }
@@ -288,8 +321,11 @@ export interface UserAssertionFunctionDefinition {
 export type DesignStoreValueSpec =
   | { from: string }
   | { literal: unknown }
+  | { source: "element"; selector: string; token?: string; attribute?: string }
+  | { source: "store" | "arg" | "context" | "env"; path: string }
   | { expressionId: string }
   | { functionId: string; args?: Record<string, unknown> }
+  | { code: InlineCodeBlock; args?: Record<string, unknown> }
   | { fields: Record<string, DesignStoreValueSpec> };
 
 export type DesignOperationDefinition =

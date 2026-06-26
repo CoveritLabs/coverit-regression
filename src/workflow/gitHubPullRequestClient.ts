@@ -171,7 +171,8 @@ class GitHubPullRequestClient {
   }
 
   private parseRepository(repositoryUrl: string): { owner: string; repo: string } {
-    const httpsMatch = repositoryUrl.match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/i);
+    const normalizedUrl = repositoryUrl.trim().replace(/\/+$/, "");
+    const httpsMatch = normalizedUrl.match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/i);
     if (!httpsMatch) {
       throw new Error(`[Git Workflow] Unsupported GitHub repository URL: ${repositoryUrl}`);
     }

@@ -1,14 +1,14 @@
 import fs from "fs";
 
-import { CoveritConfig, RegressionArtifactFile, RegressionEvent, RunSummary } from "@/types";
+import { ApiReportingConfig, RegressionArtifactFile, RegressionEvent, RunSummary } from "@/types";
 
 export class CoveritApiClient {
   private readonly baseUrl: string;
   private readonly requestTimeoutMs = 5_000;
   private readonly artifactUploadTimeoutMs = 60_000;
 
-  constructor(private readonly config: CoveritConfig) {
-    this.baseUrl = config.api.baseUrl.replace(/\/+$/, "");
+  constructor(private readonly apiReporting: ApiReportingConfig) {
+    this.baseUrl = apiReporting.baseUrl.replace(/\/+$/, "");
   }
 
   async sendEvent(event: RegressionEvent): Promise<void> {
@@ -52,7 +52,7 @@ export class CoveritApiClient {
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
-        "X-CoverIt-Api-Key": this.config.api.apiKey ?? "",
+        "X-CoverIt-Api-Key": this.apiReporting.apiKey ?? "",
       },
       body: JSON.stringify(body),
     }).finally(() => clearTimeout(timeout));
@@ -70,7 +70,7 @@ export class CoveritApiClient {
       method: "POST",
       signal: controller.signal,
       headers: {
-        "X-CoverIt-Api-Key": this.config.api.apiKey ?? "",
+        "X-CoverIt-Api-Key": this.apiReporting.apiKey ?? "",
       },
       body,
     }).finally(() => clearTimeout(timeout));

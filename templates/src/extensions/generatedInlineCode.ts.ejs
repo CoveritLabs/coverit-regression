@@ -1,0 +1,61 @@
+import type { AssertionFunction, AssertionFunctionResult, DesignFunction, HookFunction } from "@/types";
+
+<% for (const importLine of metadata.inlineCode.imports) { -%>
+<%- importLine %>
+<% } -%>
+
+export const generatedDesignFunctions: Record<string, DesignFunction> = {
+<% for (const entry of metadata.inlineCode.designFunctions) { -%>
+  <%- JSON.stringify(entry.id) %>: async (context, args) => {
+<%- helpers.indent(entry.body.trim() || "return undefined;", 4) %>
+<% if (entry.declaredFunctionName) { -%>
+    return await <%- entry.declaredFunctionName %>(context.store, (context as { page?: unknown }).page, context.extracts, args);
+<% } -%>
+  },
+<% } -%>
+};
+
+export const generatedAssertionFunctions: Record<string, AssertionFunction> = {
+<% for (const entry of metadata.inlineCode.assertionFunctions) { -%>
+  <%- JSON.stringify(entry.id) %>: async (context, args) => {
+<% if (entry.declaredFunctionName) { -%>
+<%- helpers.indent(entry.body.trim() || "return { passed: true, message: \"Inline assertion completed.\" };", 4) %>
+    const result = await <%- entry.declaredFunctionName %>(context.store, context.page, context.extracts, args);
+    return normalizeAssertionFunctionResult(result, <%- JSON.stringify(entry.id) %>);
+<% } else { -%>
+    const result = await (async () => {
+<%- helpers.indent(entry.body.trim() || "return { passed: true, message: \"Inline assertion completed.\" };", 6) %>
+    })();
+    return normalizeAssertionFunctionResult(result, <%- JSON.stringify(entry.id) %>);
+<% } -%>
+  },
+<% } -%>
+};
+
+export const generatedHookFunctions: Record<string, HookFunction> = {
+<% for (const entry of metadata.inlineCode.hookFunctions) { -%>
+  <%- JSON.stringify(entry.id) %>: async (context, args) => {
+<%- helpers.indent(entry.body.trim() || "return undefined;", 4) %>
+<% if (entry.declaredFunctionName) { -%>
+    return await <%- entry.declaredFunctionName %>(context, args);
+<% } -%>
+  },
+<% } -%>
+};
+
+function normalizeAssertionFunctionResult(value: unknown, functionId: string): AssertionFunctionResult {
+  if (typeof value === "object" && value !== null && "passed" in value) {
+    const result = value as Partial<AssertionFunctionResult>;
+    return {
+      passed: result.passed === true,
+      message: result.message ?? `Assertion function "${functionId}" completed.`,
+      severity: result.severity,
+      details: result.details,
+    };
+  }
+
+  return {
+    passed: Boolean(value),
+    message: `Assertion function "${functionId}" returned ${Boolean(value) ? "passed" : "failed"}.`,
+  };
+}
